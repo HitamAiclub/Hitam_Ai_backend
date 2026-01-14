@@ -527,12 +527,14 @@ const startServer = (port) => {
 
   // Graceful shutdown
   process.on('SIGTERM', () => {
-    console.log('📴 SIGTERM received, shutting down gracefully');
-    server.close(() => {
-      console.log('✅ Server closed');
-      process.exit(0);
-    });
+    process.exit(0);
   });
-};
+}
 
-startServer(PORT);
+
+// Only listen if not running on Vercel (Vercel exports the app)
+if (!process.env.VERCEL) {
+  startServer(PORT);
+}
+
+export default app;
