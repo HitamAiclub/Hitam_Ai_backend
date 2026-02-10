@@ -1,43 +1,49 @@
-
 import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Load env from root
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
+console.log("Checking Cloudinary Config...");
+console.log("Cloud Name:", process.env.VITE_CLOUDINARY_CLOUD_NAME);
+console.log("API Key:", process.env.VITE_CLOUDINARY_API_KEY ? "Set" : "Missing");
+console.log("Preset to test:", process.env.VITE_CLOUDINARY_UPLOAD_PRESET);
 
 cloudinary.config({
     cloud_name: process.env.VITE_CLOUDINARY_CLOUD_NAME,
     api_key: process.env.VITE_CLOUDINARY_API_KEY,
-    api_secret: process.env.VITE_CLOUDINARY_API_SECRET
+    api_secret: process.env.VITE_CLOUDINARY_API_SECRET,
 });
 
-const checkFolders = async () => {
+async function checkPreset() {
     try {
-        console.log('--- Root Folders ---');
-        const rootFolders = await cloudinary.api.sub_folders('/');
-        console.log(rootFolders.folders.map(f => `${f.name} (${f.path})`));
+        console.log("\nAttempting to list presets...");
+        const result = await cloudinary.api.upload_presets({ max_results: 500 });
 
-        console.log('\n--- hitam_ai children ---');
-        try {
-            const hitamChildren = await cloudinary.api.sub_folders('hitam_ai');
-            console.log(hitamChildren.folders.map(f => `${f.name} (${f.path})`));
+        const preset = result.presets.find(p => p.name === process.env.VITE_CLOUDINARY_UPLOAD_PRESET);
 
-            // Check if there is a nested hitam_ai
-            const nested = hitamChildren.folders.find(f => f.name === 'hitam_ai');
-            if (nested) {
-                console.log('\n!!! FOUND NESTED hitam_ai !!!');
-                console.log('Path:', nested.path);
+        if (preset) {
+            console.log("✅ Preset Found!");
+            console.log("Name:", preset.name);
+            console.log("Unsigned:", preset.unsigned);
+            console.log("Folder Mode:", preset.settings.folder ? "Fixed" : "Dynamic Allowed (maybe)");
 
-                console.log('\n--- hitam_ai/hitam_ai children ---');
-                const nestedChildren = await cloudinary.api.sub_folders('hitam_ai/hitam_ai');
-                console.log(nestedChildren.folders.map(f => `${f.name} (${f.path})`));
+            if (!preset.unsigned) {
+                console.error("❌ ERROR: Preset is SIGNED. It must be UNSIGNED for client-side uploads.");
+            } else {
+                console.log("✅ Preset configuration looks correct for unsigned upload.");
             }
-
-        } catch (e) {
-            console.log('Error fetching hitam_ai children:', e.message);
+        } else {
+            console.error(`❌ Preset '${process.env.VITE_CLOUDINARY_UPLOAD_PRESET}' NOT found.`);
+            console.log("Available presets:", result.presets.map(p => p.name).join(", "));
         }
-
     } catch (error) {
-        console.error('Error:', error);
+        console.error("Error accessing Cloudinary API:", error.message);
     }
-};
+}
 
-checkFolders();
+checkPreset();
