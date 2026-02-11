@@ -347,154 +347,145 @@ app.delete("/api/cloudinary/delete-folder", async (req, res) => {
   }
 });
 
+// Helper to rename folder recursively
+const renameFolderRecursive = async (fromPath, toPath) => {
+  console.log(`🔄 Rename Recursive: ${fromPath} -> ${toPath}`);
+
+  let filesFound = 0;
+  let subfoldersFound = 0;
+
+  // 1. Rename files in this folder
+  // Use Search API as primary method
+  let cursor = null;
+  do {
+    const result = await cloudinary.search
+      .expression(`folder:"${fromPath}"`)
+      .max_results(500)
+      .next_cursor(cursor)
+      .execute();
+    cursor = result.next_cursor;
+
+    if (result.resources.length > 0) {
+      filesFound += result.resources.length;
+      for (const file of result.resources) {
+        await renameAsset(file, fromPath, toPath);
+      }
+    }
+  } while (cursor);
+
+  // 1b. Fallback: If no files found via Search, check Admin API (handling indexing delays)
+  if (filesFound === 0) {
+    console.log(`   - Search found 0 files. Checking Admin API fallback for ${fromPath}...`);
+    try {
+      // Check images, video, raw
+      const types = ['image', 'video', 'raw'];
+      for (const type of types) {
+        const res = await cloudinary.api.resources({
+          type: 'upload',
+          prefix: fromPath + '/', // Important: prefix must have trailing slash to target folder contents
+          resource_type: type,
+          max_results: 500
+        });
+
+        if (res.resources && res.resources.length > 0) {
+          console.log(`   - Fallback: Found ${res.resources.length} ${type}s via Admin API.`);
+          filesFound += res.resources.length;
+          for (const file of res.resources) {
+            await renameAsset(file, fromPath, toPath);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`   ! Admin API fallback check warning: ${e.message}`);
+    }
+  }
+
+  // 2. Process subfolders
+  try {
+    const subRes = await cloudinary.api.sub_folders(fromPath);
+    subfoldersFound = subRes.folders.length;
+
+    for (const sub of subRes.folders) {
+      const subName = sub.name;
+      const newSubFrom = sub.path;
+      const newSubTo = `${toPath}/${subName}`;
+
+      await renameFolderRecursive(newSubFrom, newSubTo);
+    }
+  } catch (e) {
+    if (e.http_code !== 404) console.warn(`   ! Subfolder fetch warning for ${fromPath}:`, e.message);
+  }
+
+  // 3. If empty (no files found in either Search or Admin API, and no subfolders), explicitly create target folder
+  // This handles the case of renaming a strictly empty folder placeholder
+  if (filesFound === 0 && subfoldersFound === 0) {
+    console.log(`   - Empty folder detected (no files/subs). Creating target placeholder: ${toPath}`);
+    try {
+      await cloudinary.api.create_folder(toPath);
+    } catch (e) {
+      console.warn(`   ! Failed to create target folder ${toPath}:`, e.message);
+    }
+  }
+
+  // 4. Delete old folder (cleanup)
+  try {
+    await cloudinary.api.delete_folder(fromPath);
+  } catch (e) {
+    if (e.http_code !== 404) console.warn(`   ! Cleanup delete failed for ${fromPath}:`, e.message);
+  }
+};
+
+// Helper to rename a single asset
+const renameAsset = async (file, fromPath, toPath) => {
+  let currentPublicId = file.public_id;
+  let targetPublicId = null;
+
+  // Check strict directory prefix to avoid partial matching (e.g. folder vs folder_suffix)
+  const candidates = [fromPath];
+  if (!fromPath.startsWith('home/')) candidates.push(`home/${fromPath}`);
+
+  for (const prefix of candidates) {
+    // Require trailing slash for strict folder match
+    const dirPrefix = prefix + '/';
+
+    if (currentPublicId.startsWith(dirPrefix)) {
+      let targetBase = toPath;
+      if (prefix.startsWith('home/') && !toPath.startsWith('home/')) {
+        targetBase = `home/${toPath}`;
+      }
+
+      const relativePath = currentPublicId.substring(dirPrefix.length);
+      targetPublicId = `${targetBase}/${relativePath}`;
+      break;
+    }
+  }
+
+  if (!targetPublicId) {
+    console.warn(`   ! Warning: File ${currentPublicId} found in search but does not match expected folder prefix ${fromPath}/`);
+    return;
+  }
+
+  if (targetPublicId === currentPublicId) return;
+
+  try {
+    await cloudinary.uploader.rename(currentPublicId, targetPublicId, { resource_type: file.resource_type });
+  } catch (e) {
+    console.error(`   ! Failed to rename asset ${currentPublicId}:`, e.message);
+  }
+};
+
 // Rename folder (Bulk rename assets)
 app.post("/api/cloudinary/rename-folder", async (req, res) => {
   try {
     const { fromPath, toPath } = req.body;
     if (!fromPath || !toPath) return res.status(400).json({ error: 'Paths required' });
 
-    console.log(`📂 Renaming folder: "${fromPath}" -> "${toPath}"`);
+    console.log(`📂 Renaming folder request: "${fromPath}" -> "${toPath}"`);
 
-    // 1. Get all resources in old folder
-    const result = await cloudinary.search
-      .expression(`folder:"${fromPath}"`)
-      .max_results(500)
-      .execute();
-
-    let resources = result.resources;
-    console.log(`🔎 Found ${resources.length} resources in "${fromPath}"`);
-
-    // Fallback: If Search API returns 0 (due to indexing delay), try Admin API (resource listing)
-    if (resources.length === 0) {
-      console.log(`⚠️ Search returned 0 results. Checking Admin API for consistency...`);
-      const resourceTypes = ['image', 'video', 'raw'];
-      for (const type of resourceTypes) {
-        try {
-          const res = await cloudinary.api.resources({
-            type: 'upload',
-            prefix: fromPath + '/',
-            resource_type: type,
-            max_results: 500
-          });
-          if (res.resources && res.resources.length > 0) {
-            console.log(`✅ Admin API found ${res.resources.length} ${type} resources.`);
-            resources = [...resources, ...res.resources];
-          } else {
-            console.log(`ℹ️ Admin API found 0 ${type} resources with prefix "${fromPath}/"`);
-            // Robust check: Toggle 'home/' prefix
-            let altPath = fromPath.startsWith('home/') ? fromPath.replace(/^home\//, '') : `home/${fromPath}`;
-            console.log(`🔄 Checking alternate path: "${altPath}/" for ${type}...`);
-            try {
-              const altRes = await cloudinary.api.resources({
-                type: 'upload',
-                prefix: altPath + '/',
-                resource_type: type,
-                max_results: 500
-              });
-              if (altRes.resources && altRes.resources.length > 0) {
-                console.log(`✅ Admin API found ${altRes.resources.length} ${type} resources via alternate path.`);
-                // We found resources at altPath. This means 'fromPath' was slightly off for file matching.
-                // We should add them, BUT we need to be careful about renaming.
-                // If we rename file.public_id (which has altPath) using formPath, replace might fail or be wrong.
-                // Strategy: normalize to the path that actually has files.
-                resources = [...resources, ...altRes.resources];
-              }
-            } catch (errAlt) {
-              console.warn(`⚠️ Alt path check failed: ${errAlt.message}`);
-            }
-          }
-        } catch (e) {
-          console.warn(`⚠️ Admin API check for ${type} failed: ${e.message}`);
-        }
-      }
-    }
-
-    if (resources.length === 0) {
-      // Just empty folder?
-      try {
-        await cloudinary.api.create_folder(toPath);
-        await cloudinary.api.delete_folder(fromPath);
-      } catch (e) {
-        console.warn(`⚠️ Empty folder rename cleanup warning: ${e.message}`);
-      }
-      return res.json({ success: true, message: 'Empty folder renamed' });
-    }
-
-    // 2. Rename each asset
-    console.log(`🔄 Renaming ${resources.length} assets...`);
-    const results = await Promise.allSettled(resources.map(async (file) => {
-      // Use replace first occurrence of path
-      // Robust replace: check which path the file actually has
-      let newPublicId;
-      if (file.public_id.startsWith(fromPath)) {
-        newPublicId = file.public_id.replace(fromPath, toPath);
-      } else {
-        // It must match the altPath (or at least contain it)
-        // We need to know what the 'altPath' was.
-        // Re-derive altPath locally or just try replacing both
-        const altPath = fromPath.startsWith('home/') ? fromPath.replace(/^home\//, '') : `home/${fromPath}`;
-        if (file.public_id.startsWith(altPath)) {
-          // We also need to know if toPath needs adjustment?
-          // If fromPath="hitam_ai" (files at home/hitam_ai), toPath="hitam_ai/new"
-          // The user wants the result to be toPath.
-          // So if file is home/hitam_ai/img.jpg, we want home/hitam_ai/new/img.jpg ??
-          // Or just toPath/img.jpg?
-          // Usually Cloudinary paths are full.
-          // If we are renaming "A" to "B", and file is at "home/A/img", we probably want "home/B/img".
-
-          // Let's assume toPath should respect the same prefix logic.
-          const targetPrefix = toPath.startsWith('home/') ? toPath : (fromPath.startsWith('home/') ? toPath : (altPath.startsWith('home/') ? `home/${toPath}` : toPath));
-
-          // Simpler: replace the part that matches
-          newPublicId = file.public_id.replace(altPath, toPath.replace(/^home\//, '')); // This is getting complicated.
-
-          // Let's try to just replace the prefix found in file.public_id with the target toPath
-          // But toPath might not have 'home/' if fromPath didn't.
-
-          // If inputs: from="A", to="B". File="home/A/img".
-          // We want "home/B/img".
-          // replace("home/A", "home/B") -> "home/B/img"
-
-          // If inputs: from="home/A", to="home/B". File="A/img".
-          // We want "B/img".
-
-          // We need to construct the 'to' segment based on what 'from' segment matched.
-          const partToReplace = file.public_id.startsWith(fromPath) ? fromPath : altPath;
-          let partReplacer = toPath;
-
-          // Adjust partReplacer to match the presence/absence of 'home/' in partToReplace
-          const hasHome = partToReplace.startsWith('home/');
-          const targetHasHome = partReplacer.startsWith('home/');
-
-          if (hasHome && !targetHasHome) partReplacer = `home/${partReplacer}`;
-          if (!hasHome && targetHasHome) partReplacer = partReplacer.replace(/^home\//, '');
-
-          newPublicId = file.public_id.replace(partToReplace, partReplacer);
-        } else {
-          // Fallback
-          newPublicId = file.public_id.replace(fromPath, toPath);
-        }
-      }
-      // console.log(`  - Renaming asset: ${file.public_id} -> ${newPublicId}`);
-      return cloudinary.uploader.rename(file.public_id, newPublicId, { resource_type: file.resource_type });
-    }));
-
-    const failed = results.filter(r => r.status === 'rejected');
-    if (failed.length > 0) {
-      console.error(`❌ Failed to rename ${failed.length} assets`, failed[0].reason);
-    } else {
-      console.log(`✅ Successfully renamed all assets.`);
-    }
-
-    // 3. Cleanup logic (optional, folder usually disappears if empty)
-    try {
-      await cloudinary.api.delete_folder(fromPath);
-    } catch (e) {
-      console.log("Could not delete old folder (might not be empty)", e.message);
-    }
+    await renameFolderRecursive(fromPath, toPath);
 
     clearCache();
-    res.json({ success: true, message: `Renamed folder and ${resources.length} assets` });
+    res.json({ success: true, message: 'Folder renamed successfully' });
 
   } catch (error) {
     console.error('Error renaming folder:', error);

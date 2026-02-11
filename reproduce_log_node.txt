@@ -1,0 +1,18 @@
+--- Reproduction Test: Nested Folder Rename ---
+1. Setting up: hitam_ai/session_report/06-02-2026
+   Setup done. File: hitam_ai/session_report/06-02-2026/sample_1770803270570
+2. Executing rename...
+🔄 Rename Recursive: hitam_ai/session_report/06-02-2026 -> hitam_ai/session_report/06-02-2026_new era of hitam ai
+   Renaming hitam_ai/session_report/06-02-2026/sample_1770803234495 -> hitam_ai/session_report/06-02-2026_new era of hitam ai/sample_1770803234495
+   ! Warning: File hitam_ai/session_report/06-02-2026_new era of hitam ai new era of hitam ai/sample_1770802844395 found in search but does not match expected folder prefix hitam_ai/session_report/06-02-2026/
+   ! Warning: File hitam_ai/session_report/06-02-2026_new era of hitam ai new era of hitam ai_new era of hitam ai_new era of hitam ai/sample_image_nested_v2 found in search but does not match expected folder prefix hitam_ai/session_report/06-02-2026/
+   ! Warning: File hitam_ai/session_report/The era of Ai _06/02/2026/WhatsApp_Image_2026-02-06_at_5.56.07_PM_cb1wwq found in search but does not match expected folder prefix hitam_ai/session_report/06-02-2026/
+   ! Warning: File hitam_ai/session_report/The era of Ai _06/02/2026/WhatsApp_Image_2026-02-07_at_12.20.08_PM_pbvpsp found in search but does not match expected folder prefix hitam_ai/session_report/06-02-2026/
+   ! Warning: File hitam_ai/session_report/The era of Ai _06/02/2026/WhatsApp_Image_2026-02-06_at_6.09.32_PM_hjc5zk found in search but does not match expected folder prefix hitam_ai/session_report/06-02-2026/
+   ! Warning: File hitam_ai/session_report/The era of Ai _06/02/2026/WhatsApp_Image_2026-02-06_at_5.56.02_PM_sq7jot found in search but does not match expected folder prefix hitam_ai/session_report/06-02-2026/
+ERROR:    ! Cleanup delete failed for hitam_ai/session_report/06-02-2026: 
+   Rename Execution Finished.
+3. Verifying...
+ERROR: FAILURE: File not found at new location. 
+Old location count: 8
+4. Cleanup...
