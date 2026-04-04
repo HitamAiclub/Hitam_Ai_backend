@@ -110,6 +110,8 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Clean Root route
+
 // Root route
 app.get("/", (req, res) => {
   res.send("HITAM AI API is running");
@@ -231,7 +233,7 @@ app.get("/api/cloudinary/files", async (req, res) => {
 
     const files = result.resources.map(file => ({
       id: file.asset_id,
-      name: file.filename, // Note: raw files might behave differently
+      name: file.filename || file.public_id.split('/').pop(),
       publicId: file.public_id,
       url: file.secure_url,
       format: file.format,
@@ -526,10 +528,9 @@ app.get("/api/cloudinary/folders", async (req, res) => {
   }
 });
 
-// Upload file to Cloudinary (backend endpoint - preferred method)
 app.post("/api/cloudinary/upload", async (req, res) => {
   try {
-    const { file, folder = 'home' } = req.body;
+    const { file, folder = 'home', filename } = req.body;
 
     if (!file) {
       return res.status(400).json({ error: 'File is required' });
@@ -538,12 +539,23 @@ app.post("/api/cloudinary/upload", async (req, res) => {
     // Ensure folder starts with 'home/' unless it is 'hitam_ai'
     const targetFolder = (folder.startsWith('home/') || folder.startsWith('hitam_ai')) ? folder : `home/${folder}`;
 
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(file, {
+    let resType = 'auto';
+
+    const uploadOptions = {
       folder: targetFolder,
-      resource_type: 'auto',
-      use_filename: true,
-    });
+      resource_type: resType,
+    };
+
+    if (filename) {
+      const baseName = filename.substring(0, filename.lastIndexOf('.')) || filename;
+      const ext = filename.substring(filename.lastIndexOf('.'));
+      uploadOptions.public_id = `${baseName}_${Date.now()}${ext}`;
+    } else {
+      uploadOptions.use_filename = true;
+    }
+
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(file, uploadOptions);
 
     clearCache();
     res.json({
