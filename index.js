@@ -1,9 +1,10 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import { v2 as cloudinary } from 'cloudinary';
-
-dotenv.config();
+import { sendTicketEmail, sendWelcomeEmail } from './utils/mailer.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -653,6 +654,62 @@ app.delete("/api/cloudinary/delete", async (req, res) => {
   } catch (error) {
     console.error('Error deleting file:', error);
     res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
+// Send tickets
+app.post("/api/send-tickets", async (req, res) => {
+  try {
+    const { activity, participants, customSubject, customHtml, emailColumn, nameColumn } = req.body;
+    
+    if (!activity || !participants || !Array.isArray(participants)) {
+      return res.status(400).json({ error: 'Activity details and an array of participants are required' });
+    }
+
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: []
+    };
+
+    for (const participant of participants) {
+      try {
+        await sendTicketEmail(participant, activity, customSubject, customHtml, emailColumn, nameColumn);
+        results.success++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push({
+          participantId: participant.id,
+          error: err.message
+        });
+      }
+    }
+
+    res.json({ success: true, message: `Sent ${results.success} tickets. ${results.failed} failed.`, results });
+  } catch (error) {
+    console.error('Error in send-tickets endpoint:', error);
+    res.status(500).json({ error: 'Failed to process ticket sending' });
+  }
+});
+
+// Send Welcome Email
+app.post("/api/send-welcome", async (req, res) => {
+  try {
+    const { activity, participant, nameColumn, emailColumn, customSubject, customHtml } = req.body;
+    
+    if (!activity || !participant) {
+      return res.status(400).json({ error: 'Activity and participant data are required' });
+    }
+
+    const result = await sendWelcomeEmail(participant, activity, nameColumn, emailColumn, customSubject, customHtml);
+    
+    if (result.success) {
+      res.json({ message: 'Welcome email sent successfully', result });
+    } else {
+      res.status(500).json({ error: result.error || 'Failed to send welcome email' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
