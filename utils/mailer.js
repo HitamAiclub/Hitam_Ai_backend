@@ -182,7 +182,7 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
 /**
  * Sends a ticket email with PDF attachment
  */
-export const sendTicketEmail = async (participant, activity, customSubject, customHtml, emailColumn, nameColumn, venue = null, time = null) => {
+export const sendTicketEmail = async (participant, activity, customSubject, customHtml, emailColumn, nameColumn, venue = null, time = null, cc = null) => {
     try {
         let participantEmail = null;
         if (emailColumn && participant[emailColumn]) {
@@ -244,6 +244,7 @@ export const sendTicketEmail = async (participant, activity, customSubject, cust
             to: participantEmail,
             subject: subject,
             html: htmlBody,
+            cc: cc,
             attachments: [
                 {
                     filename: `ticket_${participant.id}.pdf`,
@@ -267,7 +268,7 @@ export const sendTicketEmail = async (participant, activity, customSubject, cust
 /**
  * Sends a simple welcome/confirmation email without attachments
  */
-export const sendWelcomeEmail = async (participant, activity, nameColumn, emailColumn, customSubject, customHtml, venue = null, time = null) => {
+export const sendWelcomeEmail = async (participant, activity, nameColumn, emailColumn, customSubject, customHtml, venue = null, time = null, cc = null) => {
     try {
         let participantEmail = null;
         if (emailColumn && participant[emailColumn]) {
@@ -328,7 +329,8 @@ export const sendWelcomeEmail = async (participant, activity, nameColumn, emailC
             from: `"${senderName}" <${emailUser}>`,
             to: participantEmail,
             subject: finalSubject,
-            html: finalHtml
+            html: finalHtml,
+            cc: cc
         };
 
         const transporter = getTransporter();
@@ -341,3 +343,43 @@ export const sendWelcomeEmail = async (participant, activity, nameColumn, emailC
         return { success: false, error: error.message };
     }
 };
+
+/**
+ * Sends a generic administrative email with basic placeholders and optional attachments
+ */
+export const sendGenericEmail = async (to, name, subject, body, cc = null, attachments = []) => {
+    try {
+        if (!to) throw new Error("Recipient email is required");
+
+        const transporter = getTransporter();
+        if (!transporter) throw new Error("Email credentials missing. Check server .env");
+
+        const emailUser = process.env.EMAIL_USER;
+        const senderName = "HITAM AI CLUB";
+
+        // Replace placeholders
+        const finalSubject = subject.replace(/\[Name\]/g, name || "Member");
+        const finalHtml = body.replace(/\[Name\]/g, name || "Member");
+
+        const mailOptions = {
+            from: `"${senderName}" <${emailUser}>`,
+            to: to,
+            subject: finalSubject,
+            html: finalHtml,
+            cc: cc,
+            attachments: attachments.map(file => ({
+                filename: file.filename || file.originalname,
+                path: file.path
+            }))
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`Generic email sent to ${to} with ${attachments.length} attachments.`);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error("Error sending generic email:", error);
+        return { success: false, error: error.message };
+    }
+};
+
+

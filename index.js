@@ -3,14 +3,28 @@ dotenv.config();
 
 import express from "express";
 import cors from "cors";
+import path from "path";
+import fs from "fs";
+import multer from "multer";
 import { v2 as cloudinary } from 'cloudinary';
-import { sendTicketEmail, sendWelcomeEmail } from './utils/mailer.js';
+import { sendTicketEmail, sendWelcomeEmail, sendGenericEmail } from './utils/mailer.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ✅ Production readiness
 const isProduction = process.env.NODE_ENV === 'production';
+
+// ✅ Multer configuration for file attachments
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// Ensure uploads directory exists
+if (!fs.existsSync('uploads')) {
+  fs.mkdirSync('uploads');
+}
 
 // ✅ CORS: Allow both development and production origins
 const corsOptions = {
@@ -660,7 +674,7 @@ app.delete("/api/cloudinary/delete", async (req, res) => {
 // Send tickets
 app.post("/api/send-tickets", async (req, res) => {
   try {
-    const { activity, participants, customSubject, customHtml, emailColumn, nameColumn, venue, time } = req.body;
+    const { activity, participants, customSubject, customHtml, emailColumn, nameColumn, venue, time, cc } = req.body;
     
     if (!activity || !participants || !Array.isArray(participants)) {
       return res.status(400).json({ error: 'Activity details and an array of participants are required' });
@@ -674,7 +688,7 @@ app.post("/api/send-tickets", async (req, res) => {
 
     for (const participant of participants) {
       try {
-        await sendTicketEmail(participant, activity, customSubject, customHtml, emailColumn, nameColumn, venue, time);
+        await sendTicketEmail(participant, activity, customSubject, customHtml, emailColumn, nameColumn, venue, time, cc);
         results.success++;
       } catch (err) {
         results.failed++;
@@ -695,13 +709,13 @@ app.post("/api/send-tickets", async (req, res) => {
 // Send Welcome Email
 app.post("/api/send-welcome", async (req, res) => {
   try {
-    const { activity, participant, nameColumn, emailColumn, customSubject, customHtml, venue, time } = req.body;
+    const { activity, participant, nameColumn, emailColumn, customSubject, customHtml, venue, time, cc } = req.body;
     
     if (!activity || !participant) {
       return res.status(400).json({ error: 'Activity and participant data are required' });
     }
 
-    const result = await sendWelcomeEmail(participant, activity, nameColumn, emailColumn, customSubject, customHtml, venue, time);
+    const result = await sendWelcomeEmail(participant, activity, nameColumn, emailColumn, customSubject, customHtml, venue, time, cc);
     
     if (result.success) {
       res.json({ message: 'Welcome email sent successfully', result });
@@ -710,6 +724,75 @@ app.post("/api/send-welcome", async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Send Bulk Generic Email
+app.post("/api/send-bulk", upload.array('attachments'), async (req, res) => {
+  try {
+    const { recipients: recipientsRaw, subject, body, cc } = req.body;
+    const attachments = req.files || [];
+    
+    // Parse recipients if sent via FormData
+    let recipients = [];
+    try {
+      recipients = typeof recipientsRaw === 'string' ? JSON.parse(recipientsRaw) : recipientsRaw;
+    } catch (e) {
+      console.error("Failed to parse recipients:", e);
+    }
+
+    if (!recipients || !Array.isArray(recipients) || !subject || !body) {
+      // Cleanup files on error
+      attachments.forEach(file => {
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      });
+      return res.status(400).json({ error: 'Recipients (array), subject, and body are required' });
+    }
+
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: []
+    };
+
+    // Sequential sending to avoid SMTP throttling
+    for (const recipient of recipients) {
+      try {
+        const { email, name } = recipient;
+        const result = await sendGenericEmail(email, name, subject, body, cc, attachments);
+        if (result.success) {
+          results.success++;
+        } else {
+          throw new Error(result.error);
+        }
+      } catch (err) {
+        results.failed++;
+        results.errors.push({
+          email: recipient.email,
+          error: err.message
+         });
+      }
+    }
+
+    // Cleanup files after sending
+    attachments.forEach(file => {
+      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    });
+
+    res.json({ 
+      success: true, 
+      message: `Processed ${results.success + results.failed} emails. ${results.success} sent, ${results.failed} failed.`, 
+      results 
+    });
+  } catch (error) {
+    console.error('Error in send-bulk endpoint:', error);
+    // Cleanup files on crash
+    if (req.files) {
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      });
+    }
+    res.status(500).json({ error: 'Failed to process bulk mail' });
   }
 });
 
