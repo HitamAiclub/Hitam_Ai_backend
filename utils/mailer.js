@@ -67,7 +67,7 @@ const extractEmail = (data) => {
 };
 
 // Function to generate the ticket PDF buffer
-const generateTicketPDF = async (participant, activity) => {
+const generateTicketPDF = async (participant, activity, venue = null, time = null) => {
     return new Promise(async (resolve, reject) => {
         try {
             const doc = new PDFDocument({ margin: 50, size: 'A4' });
@@ -131,13 +131,14 @@ const generateTicketPDF = async (participant, activity) => {
             doc.moveDown(0.5);
             doc.fontSize(12).font('Helvetica');
 
-            if (activity.eventDate) {
-                const dateParts = new Date(activity.eventDate).toLocaleString();
-                doc.text(`Date & Time: ${dateParts}`);
+            if (activity.eventDate || time) {
+                const dateVal = activity.eventDate ? new Date(activity.eventDate).toLocaleString() : '';
+                const timeVal = time || '';
+                doc.text(`Date & Time: ${dateVal} ${timeVal ? `(${timeVal})` : ''}`);
                 doc.moveDown(0.5);
             }
-            if (activity.location) {
-                 doc.text(`Location: ${activity.location}`);
+            if (venue || activity.location) {
+                 doc.text(`Venue/Location: ${venue || activity.location}`);
                  doc.moveDown(0.5);
             }
             if (activity.fee && activity.isPaid) {
@@ -181,7 +182,7 @@ const generateTicketPDF = async (participant, activity) => {
 /**
  * Sends a ticket email with PDF attachment
  */
-export const sendTicketEmail = async (participant, activity, customSubject, customHtml, emailColumn, nameColumn) => {
+export const sendTicketEmail = async (participant, activity, customSubject, customHtml, emailColumn, nameColumn, venue = null, time = null) => {
     try {
         let participantEmail = null;
         if (emailColumn && participant[emailColumn]) {
@@ -203,7 +204,7 @@ export const sendTicketEmail = async (participant, activity, customSubject, cust
         }
 
         // Generate the PDF Buffer
-        const pdfBuffer = await generateTicketPDF(participant, activity);
+        const pdfBuffer = await generateTicketPDF(participant, activity, venue, time);
 
         const emailUser = process.env.EMAIL_USER || 'noreply@hitam.ai';
         const senderName = "HITAM AI Events";
@@ -266,7 +267,7 @@ export const sendTicketEmail = async (participant, activity, customSubject, cust
 /**
  * Sends a simple welcome/confirmation email without attachments
  */
-export const sendWelcomeEmail = async (participant, activity, nameColumn, emailColumn, customSubject, customHtml) => {
+export const sendWelcomeEmail = async (participant, activity, nameColumn, emailColumn, customSubject, customHtml, venue = null, time = null) => {
     try {
         let participantEmail = null;
         if (emailColumn && participant[emailColumn]) {

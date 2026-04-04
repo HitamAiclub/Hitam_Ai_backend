@@ -660,7 +660,7 @@ app.delete("/api/cloudinary/delete", async (req, res) => {
 // Send tickets
 app.post("/api/send-tickets", async (req, res) => {
   try {
-    const { activity, participants, customSubject, customHtml, emailColumn, nameColumn } = req.body;
+    const { activity, participants, customSubject, customHtml, emailColumn, nameColumn, venue, time } = req.body;
     
     if (!activity || !participants || !Array.isArray(participants)) {
       return res.status(400).json({ error: 'Activity details and an array of participants are required' });
@@ -674,7 +674,7 @@ app.post("/api/send-tickets", async (req, res) => {
 
     for (const participant of participants) {
       try {
-        await sendTicketEmail(participant, activity, customSubject, customHtml, emailColumn, nameColumn);
+        await sendTicketEmail(participant, activity, customSubject, customHtml, emailColumn, nameColumn, venue, time);
         results.success++;
       } catch (err) {
         results.failed++;
@@ -695,13 +695,13 @@ app.post("/api/send-tickets", async (req, res) => {
 // Send Welcome Email
 app.post("/api/send-welcome", async (req, res) => {
   try {
-    const { activity, participant, nameColumn, emailColumn, customSubject, customHtml } = req.body;
+    const { activity, participant, nameColumn, emailColumn, customSubject, customHtml, venue, time } = req.body;
     
     if (!activity || !participant) {
       return res.status(400).json({ error: 'Activity and participant data are required' });
     }
 
-    const result = await sendWelcomeEmail(participant, activity, nameColumn, emailColumn, customSubject, customHtml);
+    const result = await sendWelcomeEmail(participant, activity, nameColumn, emailColumn, customSubject, customHtml, venue, time);
     
     if (result.success) {
       res.json({ message: 'Welcome email sent successfully', result });
