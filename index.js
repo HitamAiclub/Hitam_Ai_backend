@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // ✅ Multer configuration for file attachments
-const upload = multer({ 
+const upload = multer({
   dest: 'uploads/',
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
@@ -675,7 +675,7 @@ app.delete("/api/cloudinary/delete", async (req, res) => {
 app.post("/api/send-tickets", async (req, res) => {
   try {
     const { activity, participants, customSubject, customHtml, emailColumn, nameColumn, venue, time, cc } = req.body;
-    
+
     if (!activity || !participants || !Array.isArray(participants)) {
       return res.status(400).json({ error: 'Activity details and an array of participants are required' });
     }
@@ -710,13 +710,13 @@ app.post("/api/send-tickets", async (req, res) => {
 app.post("/api/send-welcome", async (req, res) => {
   try {
     const { activity, participant, nameColumn, emailColumn, customSubject, customHtml, venue, time, cc } = req.body;
-    
+
     if (!activity || !participant) {
       return res.status(400).json({ error: 'Activity and participant data are required' });
     }
 
     const result = await sendWelcomeEmail(participant, activity, nameColumn, emailColumn, customSubject, customHtml, venue, time, cc);
-    
+
     if (result.success) {
       res.json({ message: 'Welcome email sent successfully', result });
     } else {
@@ -730,9 +730,13 @@ app.post("/api/send-welcome", async (req, res) => {
 // Send Bulk Generic Email
 app.post("/api/send-bulk", upload.array('attachments'), async (req, res) => {
   try {
+    console.log("--- BULK DISPATCH FILES ---");
+    if (req.files) {
+      req.files.forEach(f => console.log(`- Original: ${f.originalname}, System: ${f.filename}, MIME: ${f.mimetype}`));
+    }
     const { recipients: recipientsRaw, subject, body, cc, activity: activityRaw } = req.body;
     const attachments = req.files || [];
-    
+
     // Parse recipients if sent via FormData
     let recipients = [];
     try {
@@ -780,7 +784,7 @@ app.post("/api/send-bulk", upload.array('attachments'), async (req, res) => {
         results.errors.push({
           email: recipient.email,
           error: err.message
-         });
+        });
       }
     }
 
@@ -789,10 +793,10 @@ app.post("/api/send-bulk", upload.array('attachments'), async (req, res) => {
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
     });
 
-    res.json({ 
-      success: true, 
-      message: `Processed ${results.success + results.failed} emails. ${results.success} sent, ${results.failed} failed.`, 
-      results 
+    res.json({
+      success: true,
+      message: `Processed ${results.success + results.failed} emails. ${results.success} sent, ${results.failed} failed.`,
+      results
     });
   } catch (error) {
     console.error('Error in send-bulk endpoint:', error);

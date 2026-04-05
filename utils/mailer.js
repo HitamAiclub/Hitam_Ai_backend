@@ -440,8 +440,9 @@ export const sendGenericEmail = async (to, name, subject, body, cc = null, attac
             html: finalHtml,
             cc: cc,
             attachments: attachments.map(file => ({
-                filename: file.filename || file.originalname,
-                path: file.path
+                filename: file.originalname || file.filename,
+                path: file.path,
+                contentType: file.mimetype
             }))
         };
 
