@@ -1,47 +1,133 @@
-import nodemailer from 'nodemailer';
-import QRCode from 'qrcode';
-import PDFDocument from 'pdfkit';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import nodemailer from "nodemailer";
+import PDFDocument from "pdfkit";
+import QRCode from "qrcode";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create a reusable transporter using Gmail
-// Requires EMAIL_USER and EMAIL_PASS to be set in .env
+/**
+ * Helper function to create the email transporter.
+ */
 const getTransporter = () => {
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
-    
+
     if (!user || !pass) {
-        console.error("CRITICAL: EMAIL_USER or EMAIL_PASS missing from environment variables!");
+        console.error("Missing EMAIL_USER or EMAIL_PASS environment variables.");
         return null;
     }
 
     return nodemailer.createTransport({
-        service: 'gmail',
+        service: "gmail",
         auth: { user, pass }
     });
 };
 
-// Helper function to extract name from dynamic fields
+/**
+ * Helper function to extract a name from dynamic participant fields.
+ */
 const extractName = (data) => {
     if (!data) return "Participant";
-    const commonKeys = ['name', 'full_name', 'fullName', 'Name', 'NAME', 'student_name', 'Participant Name'];
-    for (const key of commonKeys) {
-        if (data[key] && typeof data[key] === 'string') {
-            return data[key].trim();
+    
+    // Explicit keys first
+    const nameKeys = ['name', 'full_name', 'fullName', 'Full_Name', 'Name', 'fullname', 'fullname_address'];
+    for (const key of nameKeys) {
+        if (data[key] && typeof data[key] === 'string') return data[key].trim();
+    }
+    
+    // Search for first field that isn't email, ID, or phone
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    for (const [key, value] of Object.entries(data)) {
+        if (typeof value === 'string' && value.length > 2 && 
+            !emailRegex.test(value) && 
+            !key.toLowerCase().includes('id') && 
+            !key.toLowerCase().includes('phone')) {
+            return value.trim();
         }
     }
-
-    // Try to find any property that contains "name"
-    for (const key in data) {
-        if (key.toLowerCase().includes('name') && typeof data[key] === 'string') {
-            return data[key].trim();
-        }
-    }
+    
     return "Participant";
+};
+
+/**
+ * Helper function to wrap email content in a premium, responsive HTML shell.
+ */
+const wrapInDesignShell = (content, title = "Notification") => {
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05); border: 1px solid #f1f5f9; }
+        .header { background: #1a1a2e; padding: 40px 40px; text-align: center; position: relative; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.025em; text-transform: uppercase; }
+        .content { padding: 48px 40px; color: #1e293b; line-height: 1.6; font-size: 16px; }
+        .content p { margin-bottom: 20px; }
+        .content strong { color: #0f172a; }
+        .footer { background: #f8fafc; padding: 32px 40px; text-align: center; border-top: 1px solid #f1f5f9; }
+        .footer p { margin: 0; color: #94a3b8; font-size: 13px; margin-bottom: 8px; }
+        .social-links { margin-top: 16px; font-weight: 600; color: #64748b; font-size: 12px; }
+        .accent-bar { height: 4px; background: linear-gradient(93.17deg, #3b82f6 0.61%, #10b981 100%); }
+        .badge { display: inline-block; padding: 6px 12px; background: #f0fdf4; color: #166534; border-radius: 99px; font-size: 12px; font-weight: 700; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .highlight-box { background: #f8fafc; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; margin: 24px 0; }
+        @media only screen and (max-width: 600px) {
+            .container { margin: 0; border-radius: 0; width: 100% !important; }
+            .content { padding: 32px 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="accent-bar"></div>
+        <div class="header">
+            <h1 style="color: white; margin: 0;">${title}</h1>
+        </div>
+        <div class="content">
+            ${content}
+        </div>
+        <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} HITAM AI CLUB. All rights reserved.</p>
+            <p>You received this email because you are registered for an event or part of the HITAM AI community.</p>
+            <div class="social-links">
+                HITAM.AI &bull; TECHNOLOGY &bull; INNOVATION
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+    `;
+};
+
+/**
+ * Standardized placeholder replacement engine.
+ */
+const replacePlaceholders = (template, data = {}) => {
+    if (!template) return "";
+    
+    // Default placeholders mapping
+    const mapping = {
+        '[Participant Name]': data.participantName || data.name || "Participant",
+        '[Name]': data.participantName || data.name || "Participant",
+        '[Event Name]': data.activityTitle || data.eventTitle || "Event",
+        '[Venue]': data.venue || data.location || "To be announced",
+        '[Time]': data.time || "To be announced",
+        '[Date]': data.date || "To be announced",
+        '[Registration ID]': data.registrationId || data.id || ""
+    };
+
+    let result = template;
+    for (const [placeholder, value] of Object.entries(mapping)) {
+        const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        result = result.replace(regex, value);
+    }
+    return result;
 };
 
 // Helper function to extract email from dynamic fields
@@ -105,11 +191,9 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
             // Add Logos if they exist
             const logo1Path = path.join(__dirname, '../../client/public/logo.jpg');
             const logo2Path = path.join(__dirname, '../../client/public/Hitam-logo-greenbg.png');
-            let isLogoAdded = false;
 
             if (fs.existsSync(logo1Path)) {
                 doc.image(logo1Path, 50, 50, { height: 60 });
-                isLogoAdded = true;
             }
 
             if (fs.existsSync(logo2Path)) {
@@ -131,16 +215,17 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
             doc.moveDown(0.5);
             doc.fontSize(12).font('Helvetica');
 
-            if (activity.eventDate || time) {
-                const dateVal = activity.eventDate ? new Date(activity.eventDate).toLocaleString() : '';
-                const timeVal = time || '';
-                doc.text(`Date & Time: ${dateVal} ${timeVal ? `(${timeVal})` : ''}`);
-                doc.moveDown(0.5);
-            }
-            if (venue || activity.location) {
-                 doc.text(`Venue/Location: ${venue || activity.location}`);
-                 doc.moveDown(0.5);
-            }
+            const eventDate = activity.eventDate ? new Date(activity.eventDate).toLocaleDateString() : '';
+            const finalTime = time || activity.eventTime || '';
+            const finalVenue = venue || activity.location || '';
+
+            doc.text(`Date: ${eventDate}`);
+            doc.moveDown(0.3);
+            doc.text(`Time: ${finalTime}`);
+            doc.moveDown(0.3);
+            doc.text(`Venue: ${finalVenue}`);
+            doc.moveDown(0.5);
+
             if (activity.fee && activity.isPaid) {
                 doc.text(`Ticket Price: ₹${activity.fee}`);
                 doc.moveDown(0.5);
@@ -180,74 +265,62 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
 };
 
 /**
- * Sends a ticket email with PDF attachment
+ * Sends a ticket email with PDF attachment (Manual Ticket Generation)
  */
 export const sendTicketEmail = async (participant, activity, customSubject, customHtml, emailColumn, nameColumn, venue = null, time = null, cc = null) => {
     try {
-        let participantEmail = null;
-        if (emailColumn && participant[emailColumn]) {
-            participantEmail = participant[emailColumn];
-        } else {
-            participantEmail = extractEmail(participant);
-        }
+        let participantEmail = (emailColumn && participant[emailColumn]) ? participant[emailColumn] : extractEmail(participant);
+        if (!participantEmail) throw new Error(`Recipient has no valid email address.`);
 
-        if (!participantEmail) {
-            console.log("No email found for participant:", participant);
-            throw new Error(`Participant has no recognizable email address field.`);
-        }
-
-        let participantName = "Participant";
-        if (nameColumn && participant[nameColumn]) {
-            participantName = participant[nameColumn];
-        } else {
-            participantName = extractName(participant);
-        }
+        let participantName = (nameColumn && participant[nameColumn]) ? participant[nameColumn] : extractName(participant);
 
         // Generate the PDF Buffer
         const pdfBuffer = await generateTicketPDF(participant, activity, venue, time);
 
-        const emailUser = process.env.EMAIL_USER || 'noreply@hitam.ai';
+        const emailUser = process.env.EMAIL_USER;
         const senderName = "HITAM AI Events";
 
-        // Use custom or default subject
-        const subject = customSubject || `Your Ticket Confirmation: ${activity.title}`;
-        
-        // Use custom or default HTML body, replacing standard placeholders
-        let htmlBody = '';
-        if (customHtml) {
-            htmlBody = customHtml
-                .replace(/\[Participant Name\]/gi, participantName)
-                .replace(/\[Event Name\]/gi, activity.title)
-                .replace(/\[Registration ID\]/gi, participant.id || '');
-        } else {
-            htmlBody = `
-                <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; line-height: 1.6;">
-                    <h2>Registration Confirmed!</h2>
-                    <p>Hello <strong>${participantName}</strong>,</p>
-                    <p>Your registration for the event <strong>'${activity.title}'</strong> is confirmed.</p>
-                    <p>Please find your official ticket attached to this email. You will need to present the QR Code on your ticket at the venue for check-in.</p>
-                    
-                    <div style="background: #f4f4f4; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                        <p style="margin: 0;"><strong>Registration ID:</strong> ${participant.id}</p>
-                    </div>
+        // Setup placeholder data
+        const eventDate = activity.eventDate ? new Date(activity.eventDate).toLocaleDateString() : '';
+        const placeholderData = {
+            participantName,
+            activityTitle: activity.title,
+            registrationId: participant.id,
+            venue: venue || activity.location,
+            time: time || activity.eventTime,
+            date: eventDate
+        };
 
-                    <p>If you have any questions, feel free to reply to this email.</p>
-                    <br>
-                    <p>Best Regards,</p>
-                    <p><strong>The HITAM AI Team</strong></p>
-                </div>
-            `;
-        }
+        const subject = replacePlaceholders(customSubject || `Your Ticket Confirmation: ${activity.title}`, placeholderData);
+        
+        let contentHtml = customHtml || `
+            <div class="badge">Registration Confirmed</div>
+            <p>Hello <strong>${participantName}</strong>,</p>
+            <p>Your registration for the event <strong>'${activity.title}'</strong> is successfully confirmed.</p>
+            <p>Please find your official entry ticket attached to this email. You will need to present the QR Code on your ticket at the venue for check-in.</p>
+            
+            <div class="highlight-box">
+                <p style="margin: 0;"><strong>Registration ID:</strong> ${participant.id || 'N/A'}</p>
+                <p style="margin: 5px 0 0 0;"><strong>Event:</strong> ${activity.title}</p>
+            </div>
+
+            <p>If you have any questions, feel free to reply to this email.</p>
+            <br>
+            <p>Best Regards,</p>
+            <p><strong>The HITAM AI Team</strong></p>
+        `;
+
+        const finalHtml = wrapInDesignShell(replacePlaceholders(contentHtml, placeholderData), "Event Ticket");
 
         const mailOptions = {
             from: `"${senderName}" <${emailUser}>`,
             to: participantEmail,
             subject: subject,
-            html: htmlBody,
+            html: finalHtml,
             cc: cc,
             attachments: [
                 {
-                    filename: `ticket_${participant.id}.pdf`,
+                    filename: `ticket_${participant.id || 'reg'}.pdf`,
                     content: pdfBuffer,
                     contentType: 'application/pdf'
                 }
@@ -255,9 +328,8 @@ export const sendTicketEmail = async (participant, activity, customSubject, cust
         };
 
         const transporter = getTransporter();
-        if (!transporter) throw new Error("Email credentials missing. Check server .env");
+        if (!transporter) throw new Error("Email credentials missing.");
         const info = await transporter.sendMail(mailOptions);
-        console.log(`Email sent successfully to ${participantEmail}. MessageId: ${info.messageId}`);
         return { success: true, messageId: info.messageId, email: participantEmail };
     } catch (error) {
         console.error("Error sending ticket email:", error);
@@ -266,64 +338,52 @@ export const sendTicketEmail = async (participant, activity, customSubject, cust
 };
 
 /**
- * Sends a simple welcome/confirmation email without attachments
+ * Sends an automatic registration confirmation email (Post-Registration)
  */
 export const sendWelcomeEmail = async (participant, activity, nameColumn, emailColumn, customSubject, customHtml, venue = null, time = null, cc = null) => {
     try {
-        let participantEmail = null;
-        if (emailColumn && participant[emailColumn]) {
-            participantEmail = participant[emailColumn];
-        } else {
-            participantEmail = extractEmail(participant);
-        }
+        let participantEmail = (emailColumn && participant[emailColumn]) ? participant[emailColumn] : extractEmail(participant);
+        if (!participantEmail) return { success: false, error: 'No email found' };
 
-        if (!participantEmail) {
-            console.log("No email found for welcome:", participant);
-            return { success: false, error: 'No email found' };
-        }
+        let participantName = (nameColumn && participant[nameColumn]) ? participant[nameColumn] : extractName(participant);
 
-        let participantName = "Participant";
-        if (nameColumn && participant[nameColumn]) {
-            participantName = participant[nameColumn];
-        } else {
-            participantName = extractName(participant);
-        }
-
-        const emailUser = process.env.EMAIL_USER || 'noreply@hitam.ai';
+        const emailUser = process.env.EMAIL_USER;
         const senderName = "HITAM AI Events";
 
-        // Handle placeholders
-        const finalSubject = (customSubject || `Registration Confirmed: ${activity.title}`)
-            .replace(/\[Participant Name\]/g, participantName)
-            .replace(/\[Event Name\]/g, activity.title);
+        const eventDate = activity.eventDate ? new Date(activity.eventDate).toLocaleDateString() : '';
+        const placeholderData = {
+            participantName,
+            activityTitle: activity.title,
+            registrationId: participant.id,
+            venue: venue || activity.location,
+            time: time || activity.eventTime,
+            date: eventDate
+        };
+
+        const finalSubject = replacePlaceholders(customSubject || `Registration Confirmed: ${activity.title}`, placeholderData);
 
         const defaultHtml = `
-            <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; line-height: 1.6;">
-                <h2 style="color: #10b981;">Registration Received! 🎉</h2>
-                <p>Hello <strong>${participantName}</strong>,</p>
-                <p>Thank you for registering for the event <strong>'${activity.title}'</strong>. This email confirms that we have successfully received your information.</p>
-                
-                <div style="background: #f0fdf4; padding: 20px; border-radius: 12px; margin: 25px 0; border: 1px solid #bbf7d0;">
-                    <p style="margin: 0; color: #166534;"><strong>What's Next?</strong></p>
-                    <ul style="margin-top: 10px; color: #166534; padding-left: 20px;">
-                        <li>Our team will review your registration details.</li>
-                        <li>You will receive your <strong>official entry ticket</strong> with a QR code closer to the event day.</li>
-                        <li>Keep an eye on this email address for further updates!</li>
-                    </ul>
-                </div>
-
-                <p>If you have any questions, feel free to contact us.</p>
-                <br>
-                <p>Best Regards,</p>
-                <p><strong>The HITAM AI Team</strong></p>
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                <p style="font-size: 11px; color: #999;">This is an automated confirmation of your registration.</p>
+            <div class="badge">Success</div>
+            <h2 style="color: #10b981; margin-top: 5px;">Registration Received! 🎉</h2>
+            <p>Hello <strong>${participantName}</strong>,</p>
+            <p>Thank you for registering for <strong>'${activity.title}'</strong>. This email confirms that we have successfully received your information.</p>
+            
+            <div class="highlight-box">
+                <p style="margin: 0; color: #1e293b;"><strong>What's Next?</strong></p>
+                <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #475569;">
+                    <li>Our team will review your registration details.</li>
+                    <li>You will receive your <strong>official entry ticket</strong> with a QR code closer to the event day.</li>
+                    <li>Keep an eye on this email address for further updates!</li>
+                </ul>
             </div>
+
+            <p>If you have any questions, feel free to contact us.</p>
+            <br>
+            <p>Best Regards,</p>
+            <p><strong>The HITAM AI Team</strong></p>
         `;
 
-        const finalHtml = (customHtml || defaultHtml)
-            .replace(/\[Participant Name\]/g, participantName)
-            .replace(/\[Event Name\]/g, activity.title);
+        const finalHtml = wrapInDesignShell(replacePlaceholders(customHtml || defaultHtml, placeholderData), "Registration Confirmation");
 
         const mailOptions = {
             from: `"${senderName}" <${emailUser}>`,
@@ -334,32 +394,44 @@ export const sendWelcomeEmail = async (participant, activity, nameColumn, emailC
         };
 
         const transporter = getTransporter();
-        if (!transporter) throw new Error("Email credentials missing. Check server .env");
+        if (!transporter) throw new Error("Email credentials missing.");
         const info = await transporter.sendMail(mailOptions);
-        console.log(`Welcome email sent to ${participantEmail}.`);
         return { success: true, messageId: info.messageId };
     } catch (error) {
-        console.error("Error sending welcome email:", error);
+        console.error("Error sending confirmation email:", error);
         return { success: false, error: error.message };
     }
 };
 
 /**
- * Sends a generic administrative email with basic placeholders and optional attachments
+ * Sends a general broadcast email (Mail Center)
  */
-export const sendGenericEmail = async (to, name, subject, body, cc = null, attachments = []) => {
+export const sendGenericEmail = async (to, name, subject, body, cc = null, attachments = [], activityContext = null) => {
     try {
         if (!to) throw new Error("Recipient email is required");
 
         const transporter = getTransporter();
-        if (!transporter) throw new Error("Email credentials missing. Check server .env");
+        if (!transporter) throw new Error("Email credentials missing.");
 
         const emailUser = process.env.EMAIL_USER;
-        const senderName = "HITAM AI CLUB";
+        const senderName = activityContext ? (activityContext.title || "HITAM AI Events") : "HITAM AI CLUB";
 
-        // Replace placeholders
-        const finalSubject = subject.replace(/\[Name\]/g, name || "Member");
-        const finalHtml = body.replace(/\[Name\]/g, name || "Member");
+        // Placeholder context
+        const placeholderData = {
+            participantName: name || "Member",
+            name: name || "Member"
+        };
+        
+        if (activityContext) {
+            placeholderData.activityTitle = activityContext.title;
+            placeholderData.venue = activityContext.location;
+            placeholderData.date = activityContext.eventDate ? new Date(activityContext.eventDate).toLocaleDateString() : '';
+            placeholderData.time = activityContext.eventTime;
+        }
+
+        const finalSubject = replacePlaceholders(subject, placeholderData);
+        const contentHtml = replacePlaceholders(body, placeholderData);
+        const finalHtml = wrapInDesignShell(contentHtml, senderName);
 
         const mailOptions = {
             from: `"${senderName}" <${emailUser}>`,
@@ -374,7 +446,6 @@ export const sendGenericEmail = async (to, name, subject, body, cc = null, attac
         };
 
         const info = await transporter.sendMail(mailOptions);
-        console.log(`Generic email sent to ${to} with ${attachments.length} attachments.`);
         return { success: true, messageId: info.messageId };
     } catch (error) {
         console.error("Error sending generic email:", error);

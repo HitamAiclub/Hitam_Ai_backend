@@ -730,7 +730,7 @@ app.post("/api/send-welcome", async (req, res) => {
 // Send Bulk Generic Email
 app.post("/api/send-bulk", upload.array('attachments'), async (req, res) => {
   try {
-    const { recipients: recipientsRaw, subject, body, cc } = req.body;
+    const { recipients: recipientsRaw, subject, body, cc, activity: activityRaw } = req.body;
     const attachments = req.files || [];
     
     // Parse recipients if sent via FormData
@@ -739,6 +739,16 @@ app.post("/api/send-bulk", upload.array('attachments'), async (req, res) => {
       recipients = typeof recipientsRaw === 'string' ? JSON.parse(recipientsRaw) : recipientsRaw;
     } catch (e) {
       console.error("Failed to parse recipients:", e);
+    }
+
+    // Parse activity if provided
+    let activity = null;
+    try {
+      if (activityRaw) {
+        activity = typeof activityRaw === 'string' ? JSON.parse(activityRaw) : activityRaw;
+      }
+    } catch (e) {
+      console.error("Failed to parse activity context:", e);
     }
 
     if (!recipients || !Array.isArray(recipients) || !subject || !body) {
@@ -759,7 +769,7 @@ app.post("/api/send-bulk", upload.array('attachments'), async (req, res) => {
     for (const recipient of recipients) {
       try {
         const { email, name } = recipient;
-        const result = await sendGenericEmail(email, name, subject, body, cc, attachments);
+        const result = await sendGenericEmail(email, name, subject, body, cc, attachments, activity);
         if (result.success) {
           results.success++;
         } else {
