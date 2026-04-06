@@ -189,14 +189,27 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
             doc.rect(40, 40, doc.page.width - 80, 80).fillAndStroke('#1a1a2e', '#1a1a2e');
             
             // Add Logos if they exist
-            const logo1Path = path.join(__dirname, '../../client/public/logo.jpg');
-            const logo2Path = path.join(__dirname, '../../client/public/Hitam-logo-greenbg.png');
+            // Try multiple possible paths to accommodate different deployment structures (Local vs Vercel)
+            const logo1Candidates = [
+                path.join(process.cwd(), 'client/public/logo.jpg'),
+                path.join(process.cwd(), 'public/logo.jpg'),
+                path.join(__dirname, '../../client/public/logo.jpg'),
+            ];
+            
+            const logo2Candidates = [
+                path.join(process.cwd(), 'client/public/Hitam-logo-greenbg.png'),
+                path.join(process.cwd(), 'public/Hitam-logo-greenbg.png'),
+                path.join(__dirname, '../../client/public/Hitam-logo-greenbg.png'),
+            ];
 
-            if (fs.existsSync(logo1Path)) {
+            const logo1Path = logo1Candidates.find(p => fs.existsSync(p));
+            const logo2Path = logo2Candidates.find(p => fs.existsSync(p));
+
+            if (logo1Path) {
                 doc.image(logo1Path, 50, 50, { height: 60 });
             }
 
-            if (fs.existsSync(logo2Path)) {
+            if (logo2Path) {
                 const img2Width = 120;
                 doc.image(logo2Path, doc.page.width - 50 - img2Width, 50, { height: 60, width: img2Width, fit: [img2Width, 60] });
             }

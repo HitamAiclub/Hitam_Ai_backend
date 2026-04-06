@@ -5,6 +5,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import multer from "multer";
 import { v2 as cloudinary } from 'cloudinary';
 import { sendTicketEmail, sendWelcomeEmail, sendGenericEmail } from './utils/mailer.js';
@@ -16,14 +17,19 @@ const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // ✅ Multer configuration for file attachments
+const uploadDir = path.join(os.tmpdir(), 'hitam-uploads');
 const upload = multer({
-  dest: 'uploads/',
+  dest: uploadDir,
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
-// Ensure uploads directory exists
-if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads');
+// Ensure uploads directory exists in transient storage
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn('⚠️ Could not create transient upload directory:', err.message);
 }
 
 // ✅ CORS: Allow both development and production origins
