@@ -93,11 +93,17 @@ const wrapInDesignShell = (content, title = "Notification") => {
             ${content}
         </div>
         <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} HITAM AI CLUB. All rights reserved.</p>
-            <p>You received this email because you are registered for an event or part of the HITAM AI community.</p>
-            <div class="social-links">
-                HITAM.AI &bull; TECHNOLOGY &bull; INNOVATION
+            <div style="margin-bottom: 20px;">
+                <img src="https://hitam-ai-club.vercel.app/logo.jpg" alt="Hitam AI Club" style="width: 50px; height: 50px; border-radius: 12px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;"/>
+                <p style="margin: 0; color: #1e293b; font-size: 16px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;">Hitam AI Club</p>
             </div>
+            <div style="margin-bottom: 20px;">
+                <p style="margin: 0 0 10px 0; color: #64748b; font-weight: 700; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">Connect With Us</p>
+                <a href="https://www.instagram.com/hitamaiclub?igsh=ZnFsdnZya2RyN3N3" style="text-decoration: none; display: inline-block;">
+                    <img src="https://img.icons8.com/color/48/instagram-new--v1.png" alt="Instagram" style="width: 24px; height: 24px; vertical-align: middle;"/>
+                </a>
+            </div>
+            <p style="margin: 0; color: #94a3b8; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; border-top: 1px solid #f1f5f9; padding-top: 15px;">HITAM.AI &bull; TECHNOLOGY &bull; INNOVATION</p>
         </div>
     </div>
 </body>
