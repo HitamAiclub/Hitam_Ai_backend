@@ -103,7 +103,7 @@ const wrapInDesignShell = (content, title = "Notification") => {
                     <img src="https://img.icons8.com/color/48/instagram-new--v1.png" alt="Instagram" style="width: 24px; height: 24px; vertical-align: middle;"/>
                 </a>
             </div>
-            <p style="margin: 0; color: #94a3b8; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; border-top: 1px solid #f1f5f9; padding-top: 15px;">HITAM.AI &bull; TECHNOLOGY &bull; INNOVATION</p>
+            <p style="margin: 0; color: #94a3b8; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; border-top: 1px solid #f1f5f9; padding-top: 15px;">HITAM-AI &bull; TECHNOLOGY &bull; INNOVATION</p>
         </div>
     </div>
 </body>
