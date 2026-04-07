@@ -99,7 +99,7 @@ const wrapInDesignShell = (content, title = "Notification") => {
             </div>
             <div style="margin-bottom: 20px;">
                 <p style="margin: 0 0 10px 0; color: #64748b; font-weight: 700; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">Connect With Us</p>
-                <a href="https://www.instagram.com/hitamaiclub?igsh=ZnFsdnZya2RyN3N3" style="text-decoration: none; display: inline-block;">
+                <a href="https://www.instagram.com/hitamaiclub?igsh=aTYwcXQyZWh1NXZj" style="text-decoration: none; display: inline-block;">
                     <img src="https://img.icons8.com/color/48/instagram-new--v1.png" alt="Instagram" style="width: 24px; height: 24px; vertical-align: middle;"/>
                 </a>
             </div>
