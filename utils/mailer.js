@@ -99,9 +99,14 @@ const wrapInDesignShell = (content, title = "Notification") => {
             </div>
             <div style="margin-bottom: 20px;">
                 <p style="margin: 0 0 10px 0; color: #64748b; font-weight: 700; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">Connect With Us</p>
-                <a href="https://www.instagram.com/hitamaiclub?igsh=aTYwcXQyZWh1NXZj" style="text-decoration: none; display: inline-block;">
-                    <img src="https://img.icons8.com/color/48/instagram-new--v1.png" alt="Instagram" style="width: 24px; height: 24px; vertical-align: middle;"/>
-                </a>
+                <div style="display: flex; justify-content: center; gap: 15px;">
+                    <a href="https://www.instagram.com/hitamaiclub?igsh=aTYwcXQyZWh1NXZj" style="text-decoration: none;">
+                        <img src="https://img.icons8.com/color/48/instagram-new--v1.png" alt="Instagram" style="width: 28px; height: 28px; vertical-align: middle;"/>
+                    </a>
+                    <a href="https://www.linkedin.com/in/hitam-ai-club-870818401" style="text-decoration: none;">
+                        <img src="https://img.icons8.com/color/48/linkedin.png" alt="LinkedIn" style="width: 28px; height: 28px; vertical-align: middle;"/>
+                    </a>
+                </div>
             </div>
             <p style="margin: 0; color: #94a3b8; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; border-top: 1px solid #f1f5f9; padding-top: 15px;">HITAM-AI &bull; TECHNOLOGY &bull; INNOVATION</p>
         </div>
