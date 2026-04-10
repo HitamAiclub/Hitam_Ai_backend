@@ -31,24 +31,24 @@ const getTransporter = () => {
  */
 const extractName = (data) => {
     if (!data) return "Participant";
-    
+
     // Explicit keys first
     const nameKeys = ['name', 'full_name', 'fullName', 'Full_Name', 'Name', 'fullname', 'fullname_address'];
     for (const key of nameKeys) {
         if (data[key] && typeof data[key] === 'string') return data[key].trim();
     }
-    
+
     // Search for first field that isn't email, ID, or phone
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     for (const [key, value] of Object.entries(data)) {
-        if (typeof value === 'string' && value.length > 2 && 
-            !emailRegex.test(value) && 
-            !key.toLowerCase().includes('id') && 
+        if (typeof value === 'string' && value.length > 2 &&
+            !emailRegex.test(value) &&
+            !key.toLowerCase().includes('id') &&
             !key.toLowerCase().includes('phone')) {
             return value.trim();
         }
     }
-    
+
     return "Participant";
 };
 
@@ -87,7 +87,9 @@ const wrapInDesignShell = (content, title = "Notification") => {
     <div class="container">
         <div class="accent-bar"></div>
         <div class="header">
-            <h1 style="color: white; margin: 0;">${title}</h1>
+            <img src="https://hitam-ai-club.vercel.app/logo.jpg" alt="Logo" style="height: 50px; border-radius: 8px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;" />
+            <h1 style="color: white; margin: 0; margin-bottom: 15px;">${title}</h1>
+            <img src="https://hitam-ai-club.vercel.app/Hitam-logo-greenbg.png" alt="Hitam AI" style="height: 50px; border-radius: 8px; display: block; margin-left: auto; margin-right: auto;" />
         </div>
         <div class="content">
             ${content}
@@ -121,7 +123,7 @@ const wrapInDesignShell = (content, title = "Notification") => {
  */
 const replacePlaceholders = (template, data = {}) => {
     if (!template) return "";
-    
+
     // Default placeholders mapping
     const mapping = {
         '[Participant Name]': data.participantName || data.name || "Participant",
@@ -150,7 +152,7 @@ const extractEmail = (data) => {
             return data[key].trim();
         }
     }
-    
+
     // Search all values for something that looks like an email
     const values = Object.values(data);
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -198,7 +200,7 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
 
             // Header Background Box
             doc.rect(40, 40, doc.page.width - 80, 80).fillAndStroke('#1a1a2e', '#1a1a2e');
-            
+
             // Add Logos if they exist
             // Try multiple possible paths to accommodate different deployment structures (Local vs Vercel)
             const logo1Candidates = [
@@ -206,7 +208,7 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
                 path.join(process.cwd(), 'public/logo.jpg'),
                 path.join(__dirname, '../../client/public/logo.jpg'),
             ];
-            
+
             const logo2Candidates = [
                 path.join(process.cwd(), 'client/public/Hitam-logo-greenbg.png'),
                 path.join(process.cwd(), 'public/Hitam-logo-greenbg.png'),
@@ -227,7 +229,7 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
 
             // Header Text (White)
             doc.fillColor('#ffffff').fontSize(24).text('EVENT TICKET', 0, 65, { align: 'center' });
-            
+
             // Reset to black for main content
             doc.fillColor('#000000').moveDown();
 
@@ -272,7 +274,7 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
             const qrSize = 130;
             const rightMargin = doc.page.width - leftMargin - qrSize;
             doc.image(qrCodeImage, rightMargin, ticketContentY + 10, { width: qrSize, height: qrSize });
-            
+
             // QR Code instructions
             doc.fontSize(9).fillColor('#666666').text('Scan to verify entry', rightMargin, ticketContentY + 10 + qrSize + 10, { width: qrSize, align: 'center' });
 
@@ -316,7 +318,7 @@ export const sendTicketEmail = async (participant, activity, customSubject, cust
         };
 
         const subject = replacePlaceholders(customSubject || `Your Ticket Confirmation: ${activity.title}`, placeholderData);
-        
+
         let contentHtml = customHtml || `
             <div class="badge">Registration Confirmed</div>
             <p>Hello <strong>${participantName}</strong>,</p>
@@ -445,7 +447,7 @@ export const sendGenericEmail = async (to, name, subject, body, cc = null, attac
             participantName: name || "Member",
             name: name || "Member"
         };
-        
+
         if (activityContext) {
             placeholderData.activityTitle = activityContext.title;
             placeholderData.venue = activityContext.location;
