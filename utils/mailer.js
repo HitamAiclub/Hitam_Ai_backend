@@ -87,9 +87,7 @@ const wrapInDesignShell = (content, title = "Notification") => {
     <div class="container">
         <div class="accent-bar"></div>
         <div class="header">
-            <img src="https://hitam-ai-club.vercel.app/logo.jpg" alt="Logo" style="height: 50px; border-radius: 8px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;" />
-            <h1 style="color: white; margin: 0; margin-bottom: 15px;">${title}</h1>
-            <img src="https://hitam-ai-club.vercel.app/Hitam-logo-greenbg.png" alt="Hitam AI" style="height: 50px; border-radius: 8px; display: block; margin-left: auto; margin-right: auto;" />
+            <h1 style="color: white; margin: 0;">${title}</h1>
         </div>
         <div class="content">
             ${content}
@@ -201,18 +199,20 @@ const generateTicketPDF = async (participant, activity, venue = null, time = nul
             // Header Background Box
             doc.rect(40, 40, doc.page.width - 80, 80).fillAndStroke('#1a1a2e', '#1a1a2e');
 
-            // Add Logos if they exist
-            // Try multiple possible paths to accommodate different deployment structures (Local vs Vercel)
+            // Try multiple possible paths to accommodate different deployment structures
+            // Prioritize the server/assets folder which is included in the Vercel bundle
             const logo1Candidates = [
+                path.join(__dirname, '../assets/logo.jpg'),
+                path.join(process.cwd(), 'server/assets/logo.jpg'),
                 path.join(process.cwd(), 'client/public/logo.jpg'),
                 path.join(process.cwd(), 'public/logo.jpg'),
-                path.join(__dirname, '../../client/public/logo.jpg'),
             ];
-
+            
             const logo2Candidates = [
+                path.join(__dirname, '../assets/Hitam-logo-greenbg.png'),
+                path.join(process.cwd(), 'server/assets/Hitam-logo-greenbg.png'),
                 path.join(process.cwd(), 'client/public/Hitam-logo-greenbg.png'),
                 path.join(process.cwd(), 'public/Hitam-logo-greenbg.png'),
-                path.join(__dirname, '../../client/public/Hitam-logo-greenbg.png'),
             ];
 
             const logo1Path = logo1Candidates.find(p => fs.existsSync(p));
