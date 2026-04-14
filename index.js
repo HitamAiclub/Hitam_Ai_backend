@@ -225,15 +225,15 @@ app.get("/api/ai-news", async (req, res) => {
       `https://news.google.com/rss/search?q=${encodeURIComponent('("AI" OR "artificial intelligence" OR "tech startup" OR "Infosys" OR "TCS") India (launch OR funding OR "crore") when:1d')}&hl=en-IN&gl=IN&ceid=IN:en`
     ];
 
-    const feedResults = await Promise.allSettled(RSS_FEEDS.map(url => 
+    const feedResults = await Promise.allSettled(RSS_FEEDS.map(url =>
       fetch(url, { headers: fetchHeaders, signal: AbortSignal.timeout(8000) }).then(r => r.text())
     ));
-    
+
     const xml = feedResults
       .filter(r => r.status === 'fulfilled')
       .map(r => r.value)
       .join('\n');
-    
+
     // 1. Keyword Definitions
     const FILTERS = {
       MUST_INCLUDE: /\bAI\b|artificial intelligence|machine learning|deep learning|neural network|LLM|GPT|ChatGPT|Claude|Gemini|Llama|Mistral|Falcon|tech startup|generative|diffusion|transformer|automation|robotics|semiconductor|algorithm|data science|computer vision/i,
@@ -252,42 +252,42 @@ app.get("/api/ai-news", async (req, res) => {
         'Mistral': /mistral/i
       },
       INDIA_TECH: /india|indian|bangalore|bengaluru|hyderabad|mumbai|delhi|chennai|iit|isro|infosys|tcs|wipro|startup india|nasscom/i,
-      TOOLS:    /\btool\b|\bapp\b|platform|software|api|sdk|plugin|extension/i,
+      TOOLS: /\btool\b|\bapp\b|platform|software|api|sdk|plugin|extension/i,
       STARTUPS: /startup|funding|raised|series [abc]|seed round|vc|venture|acquired|acquisition|valued/i,
-      MODELS:   /\bmodel\b|llm|gpt|claude|gemini|llama|mistral|falcon|stable diffusion|flux|inference|benchmark|parameter/i,
-      VISUAL:   /sora|midjourney|dall-e|runway|pika|kling|image gen|video gen|stable diffusion|flux|gen-3|visual ai/i,
+      MODELS: /\bmodel\b|llm|gpt|claude|gemini|llama|mistral|falcon|stable diffusion|flux|inference|benchmark|parameter/i,
+      VISUAL: /sora|midjourney|dall-e|runway|pika|kling|image gen|video gen|stable diffusion|flux|gen-3|visual ai/i,
       TRAINING: /training|fine.tuning|\bgpu\b|h100|b200|dataset|pre.training|compute|supercomputer|cluster/i,
-      APPS:     /ai agent|\bagent\b|autonomous|copilot|assistant|chatbot/i,
-      AUDIO:    /suno|udio|music ai|audio gen|elevenlabs|whisper|text.to.speech/i
+      APPS: /ai agent|\bagent\b|autonomous|copilot|assistant|chatbot/i,
+      AUDIO: /suno|udio|music ai|audio gen|elevenlabs|whisper|text.to.speech/i
     };
 
     const AI_VISUALS = {
-      video:      "https://images.unsplash.com/photo-1536240478700-b869070f9279?q=80&w=1200",
-      sora:       "https://images.unsplash.com/photo-1684391791792-cf810ec42e3c?q=80&w=1200",
-      image_gen:  "https://images.unsplash.com/photo-1686191128892-cd7a56f76cf1?q=80&w=1200",
-      gpt:        "https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=1200",
-      llm:        "https://images.unsplash.com/photo-1680446260103-b28c2c13edfa?q=80&w=1200",
-      chatbot:    "https://images.unsplash.com/photo-1655720828018-edd2daec9349?q=80&w=1200",
-      nvidia:     "https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?q=80&w=1200",
-      chips:      "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1200",
-      robot:      "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?q=80&w=1200",
-      code:       "https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1200",
-      startup:    "https://images.unsplash.com/photo-1559136555-9303baea8ebd?q=80&w=1200",
-      funding:    "https://images.unsplash.com/photo-1579621970795-87facc2f976d?q=80&w=1200",
-      security:   "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1200",
+      video: "https://images.unsplash.com/photo-1536240478700-b869070f9279?q=80&w=1200",
+      sora: "https://images.unsplash.com/photo-1684391791792-cf810ec42e3c?q=80&w=1200",
+      image_gen: "https://images.unsplash.com/photo-1686191128892-cd7a56f76cf1?q=80&w=1200",
+      gpt: "https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=1200",
+      llm: "https://images.unsplash.com/photo-1680446260103-b28c2c13edfa?q=80&w=1200",
+      chatbot: "https://images.unsplash.com/photo-1655720828018-edd2daec9349?q=80&w=1200",
+      nvidia: "https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?q=80&w=1200",
+      chips: "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1200",
+      robot: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?q=80&w=1200",
+      code: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1200",
+      startup: "https://images.unsplash.com/photo-1559136555-9303baea8ebd?q=80&w=1200",
+      funding: "https://images.unsplash.com/photo-1579621970795-87facc2f976d?q=80&w=1200",
+      security: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1200",
       india_tech: "https://images.unsplash.com/photo-1532375810709-75b1da00537c?q=80&w=1200",
-      india_ai:   "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200",
-      network:    "https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=1200",
-      data:       "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=1200",
-      audio:      "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=1200",
-      default:    "https://images.unsplash.com/photo-1620712943543-bcc4628c6733?q=80&w=1200"
+      india_ai: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200",
+      network: "https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=1200",
+      data: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=1200",
+      audio: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=1200",
+      default: "https://images.unsplash.com/photo-1620712943543-bcc4628c6733?q=80&w=1200"
     };
 
     const extractRssImage = (itemContent, description) => {
       const mediaMatch = itemContent.match(/media:content[^>]*url=["']([^"']+)["']/i)
-                      || itemContent.match(/media:content[^>]*><media:thumbnail[^>]*url=["']([^"']+)["']/i)
-                      || itemContent.match(/<enclosure[^>]*url=["']([^"']+)["']/i)
-                      || itemContent.match(/<media:thumbnail[^>]*url=["']([^"']+)["']/i);
+        || itemContent.match(/media:content[^>]*><media:thumbnail[^>]*url=["']([^"']+)["']/i)
+        || itemContent.match(/<enclosure[^>]*url=["']([^"']+)["']/i)
+        || itemContent.match(/<media:thumbnail[^>]*url=["']([^"']+)["']/i);
       if (mediaMatch) return mediaMatch[1];
       const ogMatch = description.match(/src=["']([^"']+\.(jpg|jpeg|png|webp))["']/i);
       if (ogMatch) return ogMatch[1];
@@ -297,7 +297,7 @@ app.get("/api/ai-news", async (req, res) => {
     const getRelevantImage = (title, isIndia = false) => {
       const l = title.toLowerCase();
       if (isIndia && (l.includes('india') || l.includes('indian') || l.includes('bangalore') || l.includes('iit') || l.includes('isro'))) {
-        if (l.includes('startup') || l.includes('funding')) return AI_VISUALS.funding;
+        if (l.includes('startup') || l.includes('funding') || l.includes('raises') || l.includes('growth')) return AI_VISUALS.funding;
         return AI_VISUALS.india_ai;
       }
       if (l.includes('sora') || l.includes('openai video')) return AI_VISUALS.sora;
@@ -357,7 +357,7 @@ app.get("/api/ai-news", async (req, res) => {
         if (FILTERS.MODELS.test(cleanTitle)) categories.push('AI Models');
         if (FILTERS.TOOLS.test(cleanTitle)) categories.push('AI Tools');
         if (FILTERS.STARTUPS.test(cleanTitle)) categories.push('Startups');
-        
+
         for (const [brand, regex] of Object.entries(FILTERS.TECH_BRANDS)) {
           if (regex.test(cleanTitle) || regex.test(source)) {
             categories.push('Big Tech');
@@ -394,13 +394,13 @@ app.get("/api/ai-news", async (req, res) => {
         }
 
         const smartSummary = {
-          'Visual AI':  ["Next-gen video and image generation is reshaping creative workflows.", "AI-generated content is hitting new quality benchmarks."],
-          'AI Models':  ["New model capabilities are pushing the frontier of what AI can do.", "Benchmark performance and context window sizes continue to expand."],
-          'AI Tools':   ["Developer productivity tools powered by AI are accelerating software teams.", "New integrations are making AI easier to deploy in real products."],
-          'Startups':   ["AI-first startups are attracting record funding in the current cycle.", "Founders are building vertical AI products at an unprecedented pace."],
-          'Big Tech':   ["Enterprise AI adoption is celebrating across major platforms.", "Tech giants are racing to embed intelligence into every product layer."],
-          'Training':   ["Compute infrastructure is the new battleground for frontier AI.", "GPU cluster investments are defining the next wave of model capabilities."],
-          'AI Apps':    ["Autonomous AI agents are beginning to handle real-world workflows.", "Copilot-style interfaces are becoming the default for professional tools."],
+          'Visual AI': ["Next-gen video and image generation is reshaping creative workflows.", "AI-generated content is hitting new quality benchmarks."],
+          'AI Models': ["New model capabilities are pushing the frontier of what AI can do.", "Benchmark performance and context window sizes continue to expand."],
+          'AI Tools': ["Developer productivity tools powered by AI are accelerating software teams.", "New integrations are making AI easier to deploy in real products."],
+          'Startups': ["AI-first startups are attracting record funding in the current cycle.", "Founders are building vertical AI products at an unprecedented pace."],
+          'Big Tech': ["Enterprise AI adoption is celebrating across major platforms.", "Tech giants are racing to embed intelligence into every product layer."],
+          'Training': ["Compute infrastructure is the new battleground for frontier AI.", "GPU cluster investments are defining the next wave of model capabilities."],
+          'AI Apps': ["Autonomous AI agents are beginning to handle real-world workflows.", "Copilot-style interfaces are becoming the default for professional tools."],
           'General AI': ["The AI ecosystem continues to advance with new breakthroughs.", "Research and product innovation are converging at record pace."]
         };
 
@@ -408,8 +408,8 @@ app.get("/api/ai-news", async (req, res) => {
         const bullets = smartSummary[catKey] || smartSummary['General AI'];
 
         const diffMins = pubDate ? Math.round((Date.now() - new Date(pubDate)) / (1000 * 60)) : 0;
-        const timeLabel = diffMins < 60 
-          ? `${diffMins < 1 ? 'Just' : diffMins} ${diffMins <= 1 ? 'min' : 'mins'} ago` 
+        const timeLabel = diffMins < 60
+          ? `${diffMins < 1 ? 'Just' : diffMins} ${diffMins <= 1 ? 'min' : 'mins'} ago`
           : `${Math.floor(diffMins / 60)} hour${Math.floor(diffMins / 60) > 1 ? 's' : ''} ago`;
 
         items.push({
@@ -466,7 +466,7 @@ app.get("/api/ai-models", async (req, res) => {
 
     const response = await fetch('https://openrouter.ai/api/v1/models');
     const data = await response.json();
-    
+
     // 1. Process API Models
     const now = Math.floor(Date.now() / 1000);
     const apiModels = (data.data || [])
@@ -477,7 +477,7 @@ app.get("/api/ai-models", async (req, res) => {
         if (modality.includes('image')) types.push('Vision');
         if (modality.includes('video')) types.push('Video');
         if (modality.includes('audio')) types.push('Audio');
-        
+
         return {
           id: m.id,
           name: m.name,
