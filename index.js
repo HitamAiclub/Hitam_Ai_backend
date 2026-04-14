@@ -460,11 +460,16 @@ app.get("/api/ai-news", async (req, res) => {
       const catKey = categories[0] || 'General AI';
       const bullets = smartSummary[catKey] || smartSummary['General AI'];
 
+      const diffMins = pubDate ? Math.round((Date.now() - new Date(pubDate)) / (1000 * 60)) : 0;
+      const timeLabel = diffMins < 60 
+          ? `${diffMins < 1 ? 'Just' : diffMins} ${diffMins <= 1 ? 'min' : 'mins'} ago` 
+          : `${Math.floor(diffMins / 60)} hour${Math.floor(diffMins / 60) > 1 ? 's' : ''} ago`;
+
       items.push({
         title: cleanTitle,
         link,
         pubDate,
-        publishedAgo: pubDate ? `${Math.round((Date.now() - new Date(pubDate)) / (1000 * 60))} min ago` : '',
+        publishedAgo: pubDate ? timeLabel : '',
         source,
         imageUrl,
         category: catKey,
