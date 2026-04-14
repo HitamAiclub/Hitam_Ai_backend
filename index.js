@@ -36,22 +36,28 @@ try {
 // ✅ CORS: Allow both development and production origins
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow these origins
+    // In development, allow ALL localhost origins (any port — Vite, presenter, etc.)
+    if (!isProduction) {
+      if (!origin || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        return callback(null, true);
+      }
+    }
+
+    // Production whitelist
     const allowedOrigins = [
-      'http://localhost:5173',           // Local frontend (Vite dev server)
-      'http://localhost:3000',           // Alternative local port
-      'https://hitam-ai-club.vercel.app', // Production frontend
-      process.env.FRONTEND_URL,           // Env var for production
+      'https://hitam-ai-club.vercel.app',
+      process.env.FRONTEND_URL,
     ].filter(Boolean);
 
-    // Allow requests with no origin (mobile apps, curl requests)
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.warn(`⚠️ CORS blocked: ${origin}`);
       callback(new Error('CORS not allowed'));
     }
   },
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
   optionsSuccessStatus: 200
 };
