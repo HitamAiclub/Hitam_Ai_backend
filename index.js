@@ -206,44 +206,39 @@ app.get("/api/article-image", async (req, res) => {
 // AI News Proxy Endpoint
 app.get("/api/ai-news", async (req, res) => {
   try {
-    console.log("📰 Incoming Intelligent News Request");
+    console.log("📰 Incoming Intelligent News Request (24h Strict)");
     const cacheKey = 'ai_news_intelligence_v13';
     const cached = getFromCache(cacheKey);
     if (cached) return res.json(cached);
 
-    // === MULTI-FEED PARALLEL FETCH (Live last 24h — AI & Tech only) ===
+    // Common headers to prevent blocking
+    const fetchHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+    };
+
+    // Consolidated queries to reduce request count (Strict 24h)
     const RSS_FEEDS = [
-      // Core AI models, tools, and research (Global)
-      `https://news.google.com/rss/search?q=${encodeURIComponent('("AI" OR "LLM" OR "ChatGPT" OR "Claude" OR "Gemini" OR "Llama") (model OR tool OR launch OR update) when:1d')}&hl=en&gl=US&ceid=US:en`,
-      // AI startups and funding (Global)
-      `https://news.google.com/rss/search?q=${encodeURIComponent('("AI startup" OR "AI funding" OR "AI company" OR "machine learning" OR "generative AI") when:1d')}&hl=en&gl=US&ceid=US:en`,
-      // Visual AI tools (Global)
-      `https://news.google.com/rss/search?q=${encodeURIComponent('("Sora" OR "Midjourney" OR "Runway" OR "Flux" OR "DALL-E" OR "Kling" OR "image generation" OR "video generation") when:1d')}&hl=en&gl=US&ceid=US:en`,
-      // India AI & Technology — dedicated feed 1
-      `https://news.google.com/rss/search?q=${encodeURIComponent('("AI" OR "artificial intelligence" OR "machine learning") India when:1d')}&hl=en-IN&gl=IN&ceid=IN:en`,
-      // India AI & Technology — dedicated feed 2 (startups, tech companies)
-      `https://news.google.com/rss/search?q=${encodeURIComponent('("tech startup" OR "AI startup" OR "technology" OR "deep tech") India ("crore" OR "funding" OR "launch" OR "product") when:1d')}&hl=en-IN&gl=IN&ceid=IN:en`,
-      // India big tech & enterprise AI
-      `https://news.google.com/rss/search?q=${encodeURIComponent('(Infosys OR TCS OR Wipro OR "IIT" OR ISRO OR Reliance) (AI OR technology OR "artificial intelligence") when:1d')}&hl=en-IN&gl=IN&ceid=IN:en`
+      // 1. Global AI News (Models, Tools, Startups, Video)
+      `https://news.google.com/rss/search?q=${encodeURIComponent('("AI" OR "LLM" OR "ChatGPT" OR "Claude" OR "Gemini" OR "Llama" OR "Sora" OR "Runway") (model OR tool OR launch OR funding OR update) when:1d')}&hl=en&gl=US&ceid=US:en`,
+      // 2. India AI & Tech News (Startups, Big Tech, Research)
+      `https://news.google.com/rss/search?q=${encodeURIComponent('("AI" OR "artificial intelligence" OR "tech startup" OR "Infosys" OR "TCS") India (launch OR funding OR "crore") when:1d')}&hl=en-IN&gl=IN&ceid=IN:en`
     ];
 
-    const feedResults = await Promise.allSettled(RSS_FEEDS.map(url => fetch(url).then(r => r.text())));
+    const feedResults = await Promise.allSettled(RSS_FEEDS.map(url => 
+      fetch(url, { headers: fetchHeaders, signal: AbortSignal.timeout(8000) }).then(r => r.text())
+    ));
+    
     const xml = feedResults
       .filter(r => r.status === 'fulfilled')
       .map(r => r.value)
       .join('\n');
-
+    
     // 1. Keyword Definitions
     const FILTERS = {
-      // MUST contain at least one of these — strict AI/Tech gate
       MUST_INCLUDE: /\bAI\b|artificial intelligence|machine learning|deep learning|neural network|LLM|GPT|ChatGPT|Claude|Gemini|Llama|Mistral|Falcon|tech startup|generative|diffusion|transformer|automation|robotics|semiconductor|algorithm|data science|computer vision/i,
-
-      // Noise removal — anything not AI/Tech (expanded to block religious/lifestyle junk)
       EXCLUDE: /\bpolitics\b|\belection\b|crime|murder|shooting|drug|movie|bollywood|hollywood|celebrity|\bsports\b|cricket|football|\bweather\b|flood|earthquake|accident|\bdeath\b|obituary|stock market|forex|recipe|fashion|beauty|horoscope|astrology|religion|temple|church|mosque|\beid\b|\bfestival\b|covid|vaccine|hospital|diet|nutrition|jesus|god|bible|blasphemous|prayer|spiritual|devotional|sermon|pastor|priest|worship|faith|hindu|muslim|christian|church/i,
-
-      // High-value content signals — viral/trending material
       VIRAL: /launch|launched|releases|released|reveal|unveiled|introduces|new|update|version|announces|breakthrough|achieves|surpasses|beats|raises|funding|acquires|partnership|open.source|open-source/i,
-
       TECH_BRANDS: {
         'Google': /google|alphabet|gemini|gemma|deepmind/i,
         'Microsoft': /microsoft|azure|copilot|bing/i,
@@ -256,10 +251,7 @@ app.get("/api/ai-news", async (req, res) => {
         'Hugging Face': /hugging face|huggingface/i,
         'Mistral': /mistral/i
       },
-
-      // India tech filter — only include if also about AI/Tech
       INDIA_TECH: /india|indian|bangalore|bengaluru|hyderabad|mumbai|delhi|chennai|iit|isro|infosys|tcs|wipro|startup india|nasscom/i,
-
       TOOLS:    /\btool\b|\bapp\b|platform|software|api|sdk|plugin|extension/i,
       STARTUPS: /startup|funding|raised|series [abc]|seed round|vc|venture|acquired|acquisition|valued/i,
       MODELS:   /\bmodel\b|llm|gpt|claude|gemini|llama|mistral|falcon|stable diffusion|flux|inference|benchmark|parameter/i,
@@ -269,49 +261,34 @@ app.get("/api/ai-news", async (req, res) => {
       AUDIO:    /suno|udio|music ai|audio gen|elevenlabs|whisper|text.to.speech/i
     };
 
-    // === RICH IMAGE POOL (keyword-matched, never static) ===
     const AI_VISUALS = {
-      // Video & Visual AI
       video:      "https://images.unsplash.com/photo-1536240478700-b869070f9279?q=80&w=1200",
       sora:       "https://images.unsplash.com/photo-1684391791792-cf810ec42e3c?q=80&w=1200",
       image_gen:  "https://images.unsplash.com/photo-1686191128892-cd7a56f76cf1?q=80&w=1200",
-      // LLMs & Chatbots
       gpt:        "https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=1200",
       llm:        "https://images.unsplash.com/photo-1680446260103-b28c2c13edfa?q=80&w=1200",
       chatbot:    "https://images.unsplash.com/photo-1655720828018-edd2daec9349?q=80&w=1200",
-      // Hardware & Chips
       nvidia:     "https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?q=80&w=1200",
       chips:      "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1200",
-      // Robotics & Automation
       robot:      "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?q=80&w=1200",
-      // Code & Dev
       code:       "https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1200",
-      // Startups & Funding
       startup:    "https://images.unsplash.com/photo-1559136555-9303baea8ebd?q=80&w=1200",
       funding:    "https://images.unsplash.com/photo-1579621970795-87facc2f976d?q=80&w=1200",
-      // Security
       security:   "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1200",
-      // India tech
       india_tech: "https://images.unsplash.com/photo-1532375810709-75b1da00537c?q=80&w=1200",
       india_ai:   "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200",
-      // Network & Data
       network:    "https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=1200",
       data:       "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=1200",
-      // Music/Audio AI
       audio:      "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=1200",
-      // Default AI brain
       default:    "https://images.unsplash.com/photo-1620712943543-bcc4628c6733?q=80&w=1200"
     };
 
-    // Extract real image URL from RSS item (media:content, enclosure, or og:image in description)
     const extractRssImage = (itemContent, description) => {
-      // Try media:content url
       const mediaMatch = itemContent.match(/media:content[^>]*url=["']([^"']+)["']/i)
                       || itemContent.match(/media:content[^>]*><media:thumbnail[^>]*url=["']([^"']+)["']/i)
                       || itemContent.match(/<enclosure[^>]*url=["']([^"']+)["']/i)
                       || itemContent.match(/<media:thumbnail[^>]*url=["']([^"']+)["']/i);
       if (mediaMatch) return mediaMatch[1];
-      // Try og:image inside description HTML
       const ogMatch = description.match(/src=["']([^"']+\.(jpg|jpeg|png|webp))["']/i);
       if (ogMatch) return ogMatch[1];
       return null;
@@ -319,169 +296,142 @@ app.get("/api/ai-news", async (req, res) => {
 
     const getRelevantImage = (title, isIndia = false) => {
       const l = title.toLowerCase();
-      // India-specific first
       if (isIndia && (l.includes('india') || l.includes('indian') || l.includes('bangalore') || l.includes('iit') || l.includes('isro'))) {
         if (l.includes('startup') || l.includes('funding')) return AI_VISUALS.funding;
         return AI_VISUALS.india_ai;
       }
-      // Visual AI
       if (l.includes('sora') || l.includes('openai video')) return AI_VISUALS.sora;
       if (l.includes('video') || l.includes('runway') || l.includes('kling')) return AI_VISUALS.video;
       if (l.includes('image gen') || l.includes('midjourney') || l.includes('dall-e') || l.includes('flux') || l.includes('stable diffusion')) return AI_VISUALS.image_gen;
-      // LLMs & chatbots
       if (l.includes('gpt') || l.includes('openai') || l.includes('chatgpt')) return AI_VISUALS.gpt;
       if (l.includes('llm') || l.includes('llama') || l.includes('mistral') || l.includes('claude') || l.includes('gemini')) return AI_VISUALS.llm;
       if (l.includes('chatbot') || l.includes('assistant') || l.includes('copilot')) return AI_VISUALS.chatbot;
-      // Hardware
       if (l.includes('nvidia') || l.includes('h100') || l.includes('b200') || l.includes('cuda')) return AI_VISUALS.nvidia;
       if (l.includes('chip') || l.includes('semiconductor') || l.includes('hardware')) return AI_VISUALS.chips;
-      // Robotics
       if (l.includes('robot') || l.includes('automation') || l.includes('tesla')) return AI_VISUALS.robot;
-      // Code
       if (l.includes('code') || l.includes('developer') || l.includes('software') || l.includes('api') || l.includes('sdk')) return AI_VISUALS.code;
-      // Security
       if (l.includes('security') || l.includes('safe') || l.includes('cyber')) return AI_VISUALS.security;
-      // Startups & funding
       if (l.includes('funding') || l.includes('raised') || l.includes('series')) return AI_VISUALS.funding;
       if (l.includes('startup') || l.includes('invest')) return AI_VISUALS.startup;
-      // Data & Network
       if (l.includes('data') || l.includes('dataset')) return AI_VISUALS.data;
       if (l.includes('network') || l.includes('cloud')) return AI_VISUALS.network;
-      // Audio
       if (l.includes('audio') || l.includes('music') || l.includes('voice') || l.includes('speech')) return AI_VISUALS.audio;
       return AI_VISUALS.default;
     };
 
-    const items = [];
-    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-    let match;
+    const processXml = (xmlStr, hoursCutoff = 24) => {
+      const items = [];
+      const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+      let match;
+      const cutoffDate = new Date(Date.now() - hoursCutoff * 60 * 60 * 1000);
 
-    while ((match = itemRegex.exec(xml)) !== null) {
-      const itemContent = match[1];
-      const title = itemContent.match(/<title>([\s\S]*?)<\/title>/)?.[1] || "";
-      const link = itemContent.match(/<link>([\s\S]*?)<\/link>/)?.[1] || "";
-      const pubDate = itemContent.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || "";
-      const source = itemContent.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] || "";
-      const description = itemContent.match(/<description>([\s\S]*?)<\/description>/)?.[1] || "";
+      while ((match = itemRegex.exec(xmlStr)) !== null) {
+        const itemContent = match[1];
+        const title = itemContent.match(/<title>([\s\S]*?)<\/title>/)?.[1] || "";
+        const link = itemContent.match(/<link>([\s\S]*?)<\/link>/)?.[1] || "";
+        const pubDate = itemContent.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || "";
+        const source = itemContent.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] || "";
+        const description = itemContent.match(/<description>([\s\S]*?)<\/description>/)?.[1] || "";
 
-      const cleanTitle = title.replace(/ - [^-]+$/, "");
+        const cleanTitle = title.replace(/ - [^-]+$/, "");
 
-      // --- STRICT 24-HOUR DATE FILTER ---
-      if (pubDate) {
-        const articleDate = new Date(pubDate);
-        const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        if (articleDate < cutoff) continue; // Skip articles older than 24 hours
-      }
-
-      // --- GATE 1: Must be AI/Tech content ---
-      if (!FILTERS.MUST_INCLUDE.test(cleanTitle) && !FILTERS.MUST_INCLUDE.test(description.slice(0, 200))) continue;
-
-      // --- GATE 2: Exclude all noise ---
-      if (FILTERS.EXCLUDE.test(cleanTitle)) continue;
-
-      // --- GATE 3: Must have a viral/value signal, OR be India AI/Tech ---
-      const isIndiaTech = FILTERS.INDIA_TECH.test(cleanTitle) || FILTERS.INDIA_TECH.test(source);
-      // For India stories: require AI/Tech but allow through if it's from an India source (Gate 3 relaxed)
-      if (isIndiaTech) {
-        // Still block if it also passes EXCLUDE
-        if (!FILTERS.MUST_INCLUDE.test(cleanTitle) && !FILTERS.MODELS.test(cleanTitle) && !FILTERS.TOOLS.test(cleanTitle) && !FILTERS.STARTUPS.test(cleanTitle)) continue;
-      } else {
-        // Global: must have a strong viral/visual signal
-        if (!FILTERS.VIRAL.test(cleanTitle) && !FILTERS.VISUAL.test(cleanTitle)) continue;
-      }
-
-      // --- CATEGORIZATION ---
-      const region = isIndiaTech ? 'India' : 'Global';
-      let categories = [];
-      
-      if (FILTERS.VISUAL.test(cleanTitle)) categories.push('Visual AI');
-      if (FILTERS.TRAINING.test(cleanTitle)) categories.push('Training');
-      if (FILTERS.APPS.test(cleanTitle)) categories.push('AI Apps');
-      if (FILTERS.MODELS.test(cleanTitle)) categories.push('AI Models');
-      if (FILTERS.TOOLS.test(cleanTitle)) categories.push('AI Tools');
-      if (FILTERS.STARTUPS.test(cleanTitle)) categories.push('Startups');
-      
-      for (const [brand, regex] of Object.entries(FILTERS.TECH_BRANDS)) {
-        if (regex.test(cleanTitle) || regex.test(source)) {
-          categories.push('Big Tech');
-          break;
+        if (pubDate) {
+          if (new Date(pubDate) < cutoffDate) continue;
         }
-      }
-      
-      if (categories.length === 0) categories.push('General AI');
 
-      // === EXTRACT REAL IMAGE FROM RSS ===
-      const rssImage = extractRssImage(itemContent, description);
-      const fallbackImage = getRelevantImage(cleanTitle, isIndiaTech);
-      const imageUrl = (rssImage && rssImage.startsWith('http')) ? rssImage : fallbackImage;
+        if (!FILTERS.MUST_INCLUDE.test(cleanTitle) && !FILTERS.MUST_INCLUDE.test(description.slice(0, 200))) continue;
+        if (FILTERS.EXCLUDE.test(cleanTitle)) continue;
 
-      // === SMART DESCRIPTION EXTRACTION ===
-      // Google News RSS wraps related article links in <ol><li><a>Title - Source</a></li></ol>
-      // When HTML is stripped, you get the title repeated (sometimes 2-3x). We must detect & discard this.
-      const cleanDesc = description
-        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
-        .replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim();
+        const isIndiaTech = FILTERS.INDIA_TECH.test(cleanTitle) || FILTERS.INDIA_TECH.test(source);
+        if (isIndiaTech) {
+          if (!FILTERS.MUST_INCLUDE.test(cleanTitle) && !FILTERS.MODELS.test(cleanTitle) && !FILTERS.TOOLS.test(cleanTitle) && !FILTERS.STARTUPS.test(cleanTitle)) continue;
+        } else {
+          if (!FILTERS.VIRAL.test(cleanTitle) && !FILTERS.VISUAL.test(cleanTitle)) continue;
+        }
 
-      // Strip any sentence that is just a repeat/remix of the title or source
-      const titleWords = new Set(cleanTitle.toLowerCase().split(/\s+/).filter(w => w.length > 4));
-      const isTitleEcho = (sentence) => {
-        const words = sentence.toLowerCase().split(/\s+/).filter(w => w.length > 4);
-        if (words.length === 0) return true;
-        const overlap = words.filter(w => titleWords.has(w)).length;
-        return overlap / words.length > 0.55; // >55% words overlap = it's an echo
-      };
+        const region = isIndiaTech ? 'India' : 'Global';
+        let categories = [];
+        if (FILTERS.VISUAL.test(cleanTitle)) categories.push('Visual AI');
+        if (FILTERS.TRAINING.test(cleanTitle)) categories.push('Training');
+        if (FILTERS.APPS.test(cleanTitle)) categories.push('AI Apps');
+        if (FILTERS.MODELS.test(cleanTitle)) categories.push('AI Models');
+        if (FILTERS.TOOLS.test(cleanTitle)) categories.push('AI Tools');
+        if (FILTERS.STARTUPS.test(cleanTitle)) categories.push('Startups');
+        
+        for (const [brand, regex] of Object.entries(FILTERS.TECH_BRANDS)) {
+          if (regex.test(cleanTitle) || regex.test(source)) {
+            categories.push('Big Tech');
+            break;
+          }
+        }
+        if (categories.length === 0) categories.push('General AI');
 
-      // Split raw description into sentences, reject title echoes
-      const realSentences = cleanDesc
-        .split(/(?<=[.!?])\s+/)
-        .map(s => s.replace(new RegExp(source, 'gi'), '').trim())
-        .filter(s => s.length > 20 && !isTitleEcho(s));
+        const rssImage = extractRssImage(itemContent, description);
+        const fallbackImage = getRelevantImage(cleanTitle, isIndiaTech);
+        const imageUrl = (rssImage && rssImage.startsWith('http')) ? rssImage : fallbackImage;
 
-      let shortDesc = '';
-      if (realSentences.length > 0) {
-        shortDesc = realSentences.slice(0, 2).join(' ').slice(0, 220).trim();
-        if (shortDesc.length >= 220) shortDesc += '...';
-      }
-      // If still no real description, leave it empty — better blank than repeating the title
+        const cleanDesc = description
+          .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+          .replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim();
 
-      // === CONTEXT-AWARE SUMMARY BULLETS (for featured card) ===
-      // These should never be title echoes — generate based on category/context
-      const smartSummary = {
-        'Visual AI':  ["Next-gen video and image generation is reshaping creative workflows.", "AI-generated content is hitting new quality benchmarks."],
-        'AI Models':  ["New model capabilities are pushing the frontier of what AI can do.", "Benchmark performance and context window sizes continue to expand."],
-        'AI Tools':   ["Developer productivity tools powered by AI are accelerating software teams.", "New integrations are making AI easier to deploy in real products."],
-        'Startups':   ["AI-first startups are attracting record funding in the current cycle.", "Founders are building vertical AI products at an unprecedented pace."],
-        'Big Tech':   ["Enterprise AI adoption is accelerating across major platforms.", "Tech giants are racing to embed intelligence into every product layer."],
-        'Training':   ["Compute infrastructure is the new battleground for frontier AI.", "GPU cluster investments are defining the next wave of model capabilities."],
-        'AI Apps':    ["Autonomous AI agents are beginning to handle real-world workflows.", "Copilot-style interfaces are becoming the default for professional tools."],
-        'General AI': ["The AI ecosystem continues to advance with new breakthroughs.", "Research and product innovation are converging at record pace."]
-      };
+        const titleWords = new Set(cleanTitle.toLowerCase().split(/\s+/).filter(w => w.length > 4));
+        const isTitleEcho = (sentence) => {
+          const words = sentence.toLowerCase().split(/\s+/).filter(w => w.length > 4);
+          if (words.length === 0) return true;
+          const overlap = words.filter(w => titleWords.has(w)).length;
+          return overlap / words.length > 0.55;
+        };
 
-      const catKey = categories[0] || 'General AI';
-      const bullets = smartSummary[catKey] || smartSummary['General AI'];
+        const realSentences = cleanDesc
+          .split(/(?<=[.!?])\s+/)
+          .map(s => s.replace(new RegExp(source, 'gi'), '').trim())
+          .filter(s => s.length > 20 && !isTitleEcho(s));
 
-      const diffMins = pubDate ? Math.round((Date.now() - new Date(pubDate)) / (1000 * 60)) : 0;
-      const timeLabel = diffMins < 60 
+        let shortDesc = '';
+        if (realSentences.length > 0) {
+          shortDesc = realSentences.slice(0, 2).join(' ').slice(0, 220).trim();
+          if (shortDesc.length >= 220) shortDesc += '...';
+        }
+
+        const smartSummary = {
+          'Visual AI':  ["Next-gen video and image generation is reshaping creative workflows.", "AI-generated content is hitting new quality benchmarks."],
+          'AI Models':  ["New model capabilities are pushing the frontier of what AI can do.", "Benchmark performance and context window sizes continue to expand."],
+          'AI Tools':   ["Developer productivity tools powered by AI are accelerating software teams.", "New integrations are making AI easier to deploy in real products."],
+          'Startups':   ["AI-first startups are attracting record funding in the current cycle.", "Founders are building vertical AI products at an unprecedented pace."],
+          'Big Tech':   ["Enterprise AI adoption is celebrating across major platforms.", "Tech giants are racing to embed intelligence into every product layer."],
+          'Training':   ["Compute infrastructure is the new battleground for frontier AI.", "GPU cluster investments are defining the next wave of model capabilities."],
+          'AI Apps':    ["Autonomous AI agents are beginning to handle real-world workflows.", "Copilot-style interfaces are becoming the default for professional tools."],
+          'General AI': ["The AI ecosystem continues to advance with new breakthroughs.", "Research and product innovation are converging at record pace."]
+        };
+
+        const catKey = categories[0] || 'General AI';
+        const bullets = smartSummary[catKey] || smartSummary['General AI'];
+
+        const diffMins = pubDate ? Math.round((Date.now() - new Date(pubDate)) / (1000 * 60)) : 0;
+        const timeLabel = diffMins < 60 
           ? `${diffMins < 1 ? 'Just' : diffMins} ${diffMins <= 1 ? 'min' : 'mins'} ago` 
           : `${Math.floor(diffMins / 60)} hour${Math.floor(diffMins / 60) > 1 ? 's' : ''} ago`;
 
-      items.push({
-        title: cleanTitle,
-        link,
-        pubDate,
-        publishedAgo: pubDate ? timeLabel : '',
-        source,
-        imageUrl,
-        category: catKey,
-        categories,
-        region,
-        shortDesc,        // Real extracted description (may be empty)
-        bullets,          // Context-aware summary bullets (for featured card)
-        description: cleanDesc
-      });
-    }
+        items.push({
+          title: cleanTitle,
+          link,
+          pubDate,
+          publishedAgo: pubDate ? timeLabel : '',
+          source,
+          imageUrl,
+          category: catKey,
+          categories,
+          region,
+          shortDesc,
+          bullets,
+          description: cleanDesc
+        });
+      }
+      return items;
+    };
 
-    // Deduplicate by title across all 4 feeds, sort by newest first
+    let items = processXml(xml, 24);
+
     const seen = new Set();
     const dedupedItems = items
       .filter(item => {
@@ -497,13 +447,15 @@ app.get("/api/ai-news", async (req, res) => {
       fetchedAt: new Date().toISOString()
     };
 
-    setCache(cacheKey, result, 5 * 60 * 1000); // 5-minute cache for live news
+    setCache(cacheKey, result, 5 * 60 * 1000);
     res.json(result);
   } catch (error) {
     console.error('Error fetching AI intelligence:', error);
     res.status(500).json({ error: 'Failed to fetch AI news' });
   }
 });
+
+
 
 // AI Model Ranking Endpoint (For AILadder visualization)
 app.get("/api/ai-models", async (req, res) => {
